@@ -24,7 +24,7 @@ macro_rules! next_pair_unchecked {
     };
 }
 
-macro_rules! next_pair_str {
+macro_rules! next_pair_str_lit {
     ($pairs:expr) => {{
         let span = next_pair!($pairs).as_span();
         pest::Span::new(span.get_input(), span.start() + 1, span.end() - 1)
@@ -169,6 +169,23 @@ impl<'a> TryFrom<&Pair<'a, Rule>> for Integer<'a> {
 }
 
 #[derive(Debug)]
+pub struct SetKeyboardParam<'a> {
+    pub key: &'a str,
+    pub label: Identifier<'a>,
+}
+
+#[derive(Debug)]
+pub struct SetMouseParam<'a> {
+    pub x1: Integer<'a>,
+    pub y1: Integer<'a>,
+    pub x2: Integer<'a>,
+    pub y2: Integer<'a>,
+    pub label: Identifier<'a>,
+    pub x: Identifier<'a>,
+    pub y: Identifier<'a>,
+}
+
+#[derive(Debug)]
 pub enum Command<'a> {
     Beep,
     DrawArc {
@@ -265,7 +282,7 @@ pub enum Command<'a> {
         i1: Integer<'a>,
         op: LogicalOperator,
         i2: Integer<'a>,
-        n_commands: usize,
+        goto_false: usize,
     },
     MessageBox {
         typ: MessageBoxType,
@@ -282,15 +299,9 @@ pub enum Command<'a> {
         op: MathOperator,
         i2: Integer<'a>,
     },
-    SetKeyboard(
-        // TODO
-    ),
-    SetMenu(
-        // TODO
-    ),
-    SetMouse(
-        // TODO
-    ),
+    SetKeyboard(Vec<SetKeyboardParam<'a>>),
+    SetMenu(), // TODO
+    SetMouse(Vec<SetMouseParam<'a>>),
     SetWaitMode(WaitMode),
     SetWindow(SetWindowOption),
     UseBackground {
@@ -397,7 +408,7 @@ impl<'a> Command<'a> {
             "drawbitmap" => Command::DrawBitmap {
                 x: next_pair!(kwords).try_into()?,
                 y: next_pair!(kwords).try_into()?,
-                filename: next_pair_str!(kwords),
+                filename: next_pair_str_lit!(kwords),
             },
             "drawchord" => Command::DrawChord {
                 x1: next_pair!(kwords).try_into()?,
@@ -462,25 +473,48 @@ impl<'a> Command<'a> {
                 y1: next_pair!(kwords).try_into()?,
                 x2: next_pair!(kwords).try_into()?,
                 y2: next_pair!(kwords).try_into()?,
-                filename: next_pair_str!(kwords),
+                filename: next_pair_str_lit!(kwords),
             },
             "drawtext" => Command::DrawText {
                 x: next_pair!(kwords).try_into()?,
                 y: next_pair!(kwords).try_into()?,
-                text: next_pair_str!(kwords),
+                text: next_pair_str_lit!(kwords),
             },
             "messagebox" => Command::MessageBox {
                 typ: next_pair!(kwords).try_into()?,
                 default_button: next_pair!(kwords).try_into()?,
                 icon: next_pair!(kwords).try_into()?,
-                text: next_pair_str!(kwords),
-                caption: next_pair_str!(kwords),
+                text: next_pair_str_lit!(kwords),
+                caption: next_pair_str_lit!(kwords),
                 button_pushed: Identifier(next_pair!(kwords).as_str()),
             },
-            "run" => Command::Run(next_pair_str!(kwords)),
-            "setkeyboard" => Command::SetKeyboard(),
+            "run" => Command::Run(next_pair_str_lit!(kwords)),
+            "setkeyboard" => {
+                let mut params: Vec<SetKeyboardParam> = Vec::new();
+                while kwords.peek().is_some() {
+                    params.push(SetKeyboardParam {
+                        key: next_pair_str_lit!(kwords),
+                        label: next_pair!(kwords).as_str().into(),
+                    });
+                }
+                Command::SetKeyboard(params)
+            }
             "setmenu" => Command::SetMenu(),
-            "setmouse" => Command::SetMouse(),
+            "setmouse" => {
+                let mut params: Vec<SetMouseParam> = Vec::new();
+                while kwords.peek().is_some() {
+                    params.push(SetMouseParam {
+                        x1: next_pair!(kwords).try_into()?,
+                        y1: next_pair!(kwords).try_into()?,
+                        x2: next_pair!(kwords).try_into()?,
+                        y2: next_pair!(kwords).try_into()?,
+                        label: next_pair!(kwords).as_str().into(),
+                        x: next_pair!(kwords).as_str().into(),
+                        y: next_pair!(kwords).as_str().into(),
+                    });
+                }
+                Command::SetMouse(params)
+            }
             "setwaitmode" => Command::SetWaitMode(next_pair!(kwords).try_into()?),
             "setwindow" => Command::SetWindow(next_pair!(kwords).try_into()?),
             "usebackground" => Command::UseBackground {
@@ -495,10 +529,10 @@ impl<'a> Command<'a> {
                 g: next_pair!(kwords).try_into()?,
                 b: next_pair!(kwords).try_into()?,
             },
-            "usecaption" => Command::UseCaption(next_pair_str!(kwords)),
+            "usecaption" => Command::UseCaption(next_pair_str_lit!(kwords)),
             "usecoordinates" => Command::UseCoordinates(next_pair!(kwords).try_into()?),
             "usefont" => Command::UseFont {
-                name: next_pair_str!(kwords),
+                name: next_pair_str_lit!(kwords),
                 width: next_pair!(kwords).try_into()?,
                 height: next_pair!(kwords).try_into()?,
                 bold: next_pair!(kwords).try_into()?,
@@ -572,7 +606,7 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
                             i1: next_pair_unchecked!(kwords).try_into()?,
                             op: next_pair_unchecked!(kwords).try_into()?,
                             i2: next_pair_unchecked!(kwords).try_into()?,
-                            n_commands: 0,
+                            goto_false: 0,
                         });
                     }
                     Rule::command_set => {
@@ -586,7 +620,8 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
                     }
                     Rule::label => {
                         let label = next_pair_unchecked!(command_part.into_inner());
-                        if label.as_span().start_pos().line_col().1 != 0 {
+                        if label.as_span().start_pos().line_col().1 > 1 {
+                            println!("{}", label.as_span().start_pos().line_col().1);
                             return Err(Error::LabelIndentationError(label.into(), label.as_str()));
                         }
                         prog.labels
@@ -598,15 +633,15 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
         }
 
         for idx in if_indices {
-            let nc = prog.commands.len() - idx - 1;
+            let goto_false_tgt = prog.commands.len();
             if let Command::If {
                 i1: _,
                 op: _,
                 i2: _,
-                n_commands,
+                goto_false: goto_false_idx,
             } = &mut prog.commands[idx]
             {
-                *n_commands = nc;
+                *goto_false_idx = goto_false_tgt;
             }
         }
     }

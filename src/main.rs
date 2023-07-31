@@ -10,12 +10,16 @@ fn main() {
         return;
     }
 
-    let src = read_to_string(&args[1]).unwrap();
+    let src = {
+        let mut src = read_to_string(&args[1]).unwrap();
+        src.push('\n');
+        src
+    };
 
     let prog = match parse::parse(&src) {
         Ok(prog) => prog,
         Err(e) => panic!("{}", e),
     };
 
-    println!("{:?}", prog.commands);
+    println!("{:?}\n{:?}", prog.commands, prog.labels);
 }
