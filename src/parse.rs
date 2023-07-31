@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use pest::{
     iterators::{Pair, Pairs},
@@ -14,7 +14,13 @@ struct IdentParser;
 
 macro_rules! next_pair {
     ($pairs:expr) => {
-        $pairs.next().ok_or_else(|| Error::MissingPairError)?
+        (&($pairs.next().ok_or_else(|| Error::MissingArgError)?))
+    };
+}
+
+macro_rules! next_pair_unchecked {
+    ($pairs:expr) => {
+        (&($pairs.next().unwrap()))
     };
 }
 
@@ -27,7 +33,7 @@ macro_rules! next_pair_str {
     }};
 }
 
-macro_rules! make_from_str_enum {
+macro_rules! make_enum_impl_from_str {
     (
         $name:ident, $( ( $variant:ident, $str_rep:literal ) ),*
     ) => {
@@ -35,19 +41,19 @@ macro_rules! make_from_str_enum {
         pub enum $name {
             $( $variant, )*
         }
-        impl<'a> TryFrom<Pair<'a, Rule>> for $name {
+        impl<'a> TryFrom<&Pair<'a, Rule>> for $name {
             type Error = Error<'a>;
-            fn try_from(value: Pair<'a, Rule>) -> Result<Self, Self::Error> {
+            fn try_from(value: &Pair<'a, Rule>) -> Result<Self, Self::Error> {
                 match value.as_str() {
                     $($str_rep => Ok($name::$variant),)*
-                    _ => Err(Self::Error::MatchTokenError(value)),
+                    _ => Err(Self::Error::MatchTokenError(value.into(), value.as_str())),
                 }
             }
         }
     };
 }
 
-make_from_str_enum!(
+make_enum_impl_from_str!(
     LogicalOperator,
     (Equal, "="),
     (Less, "<"),
@@ -57,7 +63,7 @@ make_from_str_enum!(
     (NEqual, "<>")
 );
 
-make_from_str_enum!(
+make_enum_impl_from_str!(
     MathOperator,
     (Add, "+"),
     (Subtract, "-"),
@@ -65,7 +71,7 @@ make_from_str_enum!(
     (Divide, "/")
 );
 
-make_from_str_enum!(
+make_enum_impl_from_str!(
     MessageBoxType,
     (Ok, "OK"),
     (OkCancel, "OKCANCEL"),
@@ -73,7 +79,7 @@ make_from_str_enum!(
     (YesNoCancel, "YESNOCANCEL")
 );
 
-make_from_str_enum!(
+make_enum_impl_from_str!(
     MessageBoxIcon,
     (Information, "INFORMATION"),
     (Exclamation, "EXCLAMATION"),
@@ -82,20 +88,20 @@ make_from_str_enum!(
     (NoIcon, "NOICON")
 );
 
-make_from_str_enum!(
+make_enum_impl_from_str!(
     SetWindowOption,
     (Maximize, "MAXIMIZE"),
     (Minimize, "MINIMIZE"),
     (Restore, "RESTORE")
 );
 
-make_from_str_enum!(
+make_enum_impl_from_str!(
     UseBackgroundOption,
     (Opaque, "OPAQUE"),
     (Transparent, "TRANSPARENT")
 );
 
-make_from_str_enum!(
+make_enum_impl_from_str!(
     UseBrushOption,
     (Solid, "SOLID"),
     (DiagonalUp, "DIAGONALUP"),
@@ -107,11 +113,11 @@ make_from_str_enum!(
     (Null, "NULL")
 );
 
-make_from_str_enum!(UseCoordinatesOption, (Pixel, "PIXEL"), (Metric, "METRIC"));
+make_enum_impl_from_str!(UseCoordinatesOption, (Pixel, "PIXEL"), (Metric, "METRIC"));
 
-make_from_str_enum!(WaitMode, (Null, "NULL"), (Focus, "FOCUS"));
+make_enum_impl_from_str!(WaitMode, (Null, "NULL"), (Focus, "FOCUS"));
 
-make_from_str_enum!(
+make_enum_impl_from_str!(
     UsePenOption,
     (Solid, "SOLID"),
     (Null, "NULL"),
@@ -121,11 +127,11 @@ make_from_str_enum!(
     (DashDotDot, "DASHDOTDOT")
 );
 
-make_from_str_enum!(UseFontBold, (Bold, "BOLD"), (NoBold, "NOBOLD"));
+make_enum_impl_from_str!(UseFontBold, (Bold, "BOLD"), (NoBold, "NOBOLD"));
 
-make_from_str_enum!(UseFontItalic, (Italic, "ITALIC"), (NoItalic, "NOITALIC"));
+make_enum_impl_from_str!(UseFontItalic, (Italic, "ITALIC"), (NoItalic, "NOITALIC"));
 
-make_from_str_enum!(
+make_enum_impl_from_str!(
     UseFontUnderline,
     (Underline, "UNDERLINE"),
     (NoUnderline, "NOUNDERLINE")
@@ -146,16 +152,16 @@ pub enum Integer<'a> {
     Variable(Identifier<'a>),
 }
 
-impl<'a> TryFrom<Pair<'a, Rule>> for Integer<'a> {
+impl<'a> TryFrom<&Pair<'a, Rule>> for Integer<'a> {
     type Error = Error<'a>;
 
-    fn try_from(pair: Pair<'a, Rule>) -> Result<Integer<'a>, Self::Error> {
+    fn try_from(pair: &Pair<'a, Rule>) -> Result<Integer<'a>, Self::Error> {
         match pair.as_rule() {
-            Rule::integer => Ok(Integer::Literal(
-                pair.as_str()
-                    .parse::<u16>()
-                    .map_err(|_| Self::Error::ParseIntError(pair))?,
-            )),
+            Rule::integer => {
+                Ok(Integer::Literal(pair.as_str().parse::<u16>().map_err(
+                    |_| Self::Error::ParseIntError(pair.into(), pair.as_str()),
+                )?))
+            }
             Rule::identifier => Ok(Integer::Variable(Identifier(pair.as_str()))),
             _ => unreachable!(),
         }
@@ -322,23 +328,46 @@ pub enum Command<'a> {
     WaitInput(Option<Integer<'a>>),
 }
 
-fn pair_fmt_loc(pair: &Pair<Rule>) -> String {
-    let (line, col) = pair.as_span().start_pos().line_col();
-    format!("{}:{}:", line, col)
+#[derive(Debug)]
+pub struct ErrorLoc {
+    line: usize,
+    col: usize,
 }
 
+impl<'a> From<&Pair<'a, Rule>> for ErrorLoc {
+    fn from(value: &Pair<'a, Rule>) -> Self {
+        let (line, col) = value.as_span().start_pos().line_col();
+        ErrorLoc { line, col }
+    }
+}
+
+impl Display for ErrorLoc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}:", self.line, self.col)
+    }
+}
+
+#[allow(clippy::enum_variant_names)]
 #[derive(Error, Debug)]
 pub enum Error<'a> {
-    #[error("{} Failed to parse integer '{}'", pair_fmt_loc(.0), .0.as_str())]
-    ParseIntError(Pair<'a, Rule>),
+    #[error("{} Failed to parse integer '{}'", .0, .1)]
+    ParseIntError(ErrorLoc, &'a str),
     #[error("{}", .0)]
-    PestParseError(#[from] pest::error::Error<Rule>),
-    #[error("Expected another tok")]
-    MissingPairError,
-    #[error("{} Failed to match token '{}'", pair_fmt_loc(.0), .0.as_str())]
-    MatchTokenError(Pair<'a, Rule>),
-    #[error("{} Label '{}' is not at line start", pair_fmt_loc(.0), .0.as_str())]
-    LabelIndentationError(Pair<'a, Rule>),
+    PestParseError(Box<pest::error::Error<Rule>>),
+    #[error("Expected another argument")]
+    MissingArgError,
+    #[error("{} Failed to match token '{}'", .0, .1)]
+    MatchTokenError(ErrorLoc, &'a str),
+    #[error("{} Label '{}' is not at line start", .0, .1)]
+    LabelIndentationError(ErrorLoc, &'a str),
+    #[error("{} Command '{}' has too many arguments", .0, .1)]
+    ExtraneousArgError(ErrorLoc, &'a str),
+}
+
+impl From<pest::error::Error<Rule>> for Error<'_> {
+    fn from(value: pest::error::Error<Rule>) -> Self {
+        Error::PestParseError(Box::new(value))
+    }
 }
 
 impl<'a> Command<'a> {
@@ -353,8 +382,9 @@ impl<'a> Command<'a> {
     }
 
     fn try_from_func(kwords: &mut Pairs<'a, Rule>) -> Result<Command<'a>, Error<'a>> {
-        match next_pair!(kwords).as_str().to_lowercase().as_str() {
-            "drawarc" => Ok(Command::DrawArc {
+        let fname = next_pair_unchecked!(kwords).as_str();
+        let command = match fname.to_lowercase().as_str() {
+            "drawarc" => Command::DrawArc {
                 x1: next_pair!(kwords).try_into()?,
                 y1: next_pair!(kwords).try_into()?,
                 x2: next_pair!(kwords).try_into()?,
@@ -363,13 +393,13 @@ impl<'a> Command<'a> {
                 y3: next_pair!(kwords).try_into()?,
                 x4: next_pair!(kwords).try_into()?,
                 y4: next_pair!(kwords).try_into()?,
-            }),
-            "drawbitmap" => Ok(Command::DrawBitmap {
+            },
+            "drawbitmap" => Command::DrawBitmap {
                 x: next_pair!(kwords).try_into()?,
                 y: next_pair!(kwords).try_into()?,
                 filename: next_pair_str!(kwords),
-            }),
-            "drawchord" => Ok(Command::DrawChord {
+            },
+            "drawchord" => Command::DrawChord {
                 x1: next_pair!(kwords).try_into()?,
                 y1: next_pair!(kwords).try_into()?,
                 x2: next_pair!(kwords).try_into()?,
@@ -378,32 +408,32 @@ impl<'a> Command<'a> {
                 y3: next_pair!(kwords).try_into()?,
                 x4: next_pair!(kwords).try_into()?,
                 y4: next_pair!(kwords).try_into()?,
-            }),
-            "drawellipse" => Ok(Command::DrawEllipse {
+            },
+            "drawellipse" => Command::DrawEllipse {
                 x1: next_pair!(kwords).try_into()?,
                 y1: next_pair!(kwords).try_into()?,
                 x2: next_pair!(kwords).try_into()?,
                 y2: next_pair!(kwords).try_into()?,
-            }),
-            "drawflood" => Ok(Command::DrawFlood {
+            },
+            "drawflood" => Command::DrawFlood {
                 x: next_pair!(kwords).try_into()?,
                 y: next_pair!(kwords).try_into()?,
                 r: next_pair!(kwords).try_into()?,
                 g: next_pair!(kwords).try_into()?,
                 b: next_pair!(kwords).try_into()?,
-            }),
-            "drawline" => Ok(Command::DrawLine {
+            },
+            "drawline" => Command::DrawLine {
                 x1: next_pair!(kwords).try_into()?,
                 y1: next_pair!(kwords).try_into()?,
                 x2: next_pair!(kwords).try_into()?,
                 y2: next_pair!(kwords).try_into()?,
-            }),
-            "drawnumber" => Ok(Command::DrawNumber {
+            },
+            "drawnumber" => Command::DrawNumber {
                 x: next_pair!(kwords).try_into()?,
                 y: next_pair!(kwords).try_into()?,
                 n: next_pair!(kwords).try_into()?,
-            }),
-            "drawpie" => Ok(Command::DrawPie {
+            },
+            "drawpie" => Command::DrawPie {
                 x1: next_pair!(kwords).try_into()?,
                 y1: next_pair!(kwords).try_into()?,
                 x2: next_pair!(kwords).try_into()?,
@@ -412,62 +442,62 @@ impl<'a> Command<'a> {
                 y3: next_pair!(kwords).try_into()?,
                 x4: next_pair!(kwords).try_into()?,
                 y4: next_pair!(kwords).try_into()?,
-            }),
-            "drawrectangle" => Ok(Command::DrawRectangle {
+            },
+            "drawrectangle" => Command::DrawRectangle {
                 x1: next_pair!(kwords).try_into()?,
                 y1: next_pair!(kwords).try_into()?,
                 x2: next_pair!(kwords).try_into()?,
                 y2: next_pair!(kwords).try_into()?,
-            }),
-            "drawroundrectangle" => Ok(Command::DrawRoundRectangle {
+            },
+            "drawroundrectangle" => Command::DrawRoundRectangle {
                 x1: next_pair!(kwords).try_into()?,
                 y1: next_pair!(kwords).try_into()?,
                 x2: next_pair!(kwords).try_into()?,
                 y2: next_pair!(kwords).try_into()?,
                 x3: next_pair!(kwords).try_into()?,
                 y3: next_pair!(kwords).try_into()?,
-            }),
-            "drawsizedbitmap" => Ok(Command::DrawSizedBitmap {
+            },
+            "drawsizedbitmap" => Command::DrawSizedBitmap {
                 x1: next_pair!(kwords).try_into()?,
                 y1: next_pair!(kwords).try_into()?,
                 x2: next_pair!(kwords).try_into()?,
                 y2: next_pair!(kwords).try_into()?,
                 filename: next_pair_str!(kwords),
-            }),
-            "drawtext" => Ok(Command::DrawText {
+            },
+            "drawtext" => Command::DrawText {
                 x: next_pair!(kwords).try_into()?,
                 y: next_pair!(kwords).try_into()?,
                 text: next_pair_str!(kwords),
-            }),
-            "messagebox" => Ok(Command::MessageBox {
+            },
+            "messagebox" => Command::MessageBox {
                 typ: next_pair!(kwords).try_into()?,
                 default_button: next_pair!(kwords).try_into()?,
                 icon: next_pair!(kwords).try_into()?,
                 text: next_pair_str!(kwords),
                 caption: next_pair_str!(kwords),
                 button_pushed: Identifier(next_pair!(kwords).as_str()),
-            }),
-            "run" => Ok(Command::Run(next_pair_str!(kwords))),
-            "setkeyboard" => Ok(Command::SetKeyboard()),
-            "setmenu" => Ok(Command::SetMenu()),
-            "setmouse" => Ok(Command::SetMouse()),
-            "setwaitmode" => Ok(Command::SetWaitMode(next_pair!(kwords).try_into()?)),
-            "setwindow" => Ok(Command::SetWindow(next_pair!(kwords).try_into()?)),
-            "usebackground" => Ok(Command::UseBackground {
+            },
+            "run" => Command::Run(next_pair_str!(kwords)),
+            "setkeyboard" => Command::SetKeyboard(),
+            "setmenu" => Command::SetMenu(),
+            "setmouse" => Command::SetMouse(),
+            "setwaitmode" => Command::SetWaitMode(next_pair!(kwords).try_into()?),
+            "setwindow" => Command::SetWindow(next_pair!(kwords).try_into()?),
+            "usebackground" => Command::UseBackground {
                 option: next_pair!(kwords).try_into()?,
                 r: next_pair!(kwords).try_into()?,
                 g: next_pair!(kwords).try_into()?,
                 b: next_pair!(kwords).try_into()?,
-            }),
-            "usebrush" => Ok(Command::UseBrush {
+            },
+            "usebrush" => Command::UseBrush {
                 option: next_pair!(kwords).try_into()?,
                 r: next_pair!(kwords).try_into()?,
                 g: next_pair!(kwords).try_into()?,
                 b: next_pair!(kwords).try_into()?,
-            }),
-            "usecaption" => Ok(Command::UseCaption(next_pair_str!(kwords))),
-            "usecoordinates" => Ok(Command::UseCoordinates(next_pair!(kwords).try_into()?)),
-            "usefont" => Ok(Command::UseFont {
+            },
+            "usecaption" => Command::UseCaption(next_pair_str!(kwords)),
+            "usecoordinates" => Command::UseCoordinates(next_pair!(kwords).try_into()?),
+            "usefont" => Command::UseFont {
                 name: next_pair_str!(kwords),
                 width: next_pair!(kwords).try_into()?,
                 height: next_pair!(kwords).try_into()?,
@@ -477,22 +507,26 @@ impl<'a> Command<'a> {
                 r: next_pair!(kwords).try_into()?,
                 g: next_pair!(kwords).try_into()?,
                 b: next_pair!(kwords).try_into()?,
-            }),
-            "usepen" => Ok(Command::UsePen {
+            },
+            "usepen" => Command::UsePen {
                 option: next_pair!(kwords).try_into()?,
                 width: next_pair!(kwords).try_into()?,
                 r: next_pair!(kwords).try_into()?,
                 g: next_pair!(kwords).try_into()?,
                 b: next_pair!(kwords).try_into()?,
+            },
+            "waitinput" => Command::WaitInput(if let Some(ref milliseconds) = kwords.next() {
+                Some(milliseconds.try_into()?)
+            } else {
+                None
             }),
-            "waitinput" => Ok(Command::WaitInput(
-                if let Some(milliseconds) = kwords.next() {
-                    Some(milliseconds.try_into()?)
-                } else {
-                    None
-                },
-            )),
             _ => unreachable!(),
+        };
+
+        if let Some(ref pair) = kwords.next() {
+            Err(Error::ExtraneousArgError(pair.into(), fname))
+        } else {
+            Ok(command)
         }
     }
 }
@@ -510,10 +544,7 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
         labels: HashMap::new(),
     };
 
-    //TODO: check if exhausted pairs
-
-    let program = next_pair!(pairs);
-    for command_group in program.into_inner() {
+    for command_group in pairs.next().unwrap().into_inner() {
         let mut if_indices: Vec<usize> = Vec::new();
         for command in command_group.into_inner() {
             for command_part in command.into_inner() {
@@ -526,37 +557,37 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
                         .push(Command::try_from_func(&mut command_part.into_inner())?),
                     Rule::command_goto => {
                         prog.commands.push(Command::Goto(Identifier(
-                            next_pair!(command_part.into_inner().skip(1)).as_str(),
+                            next_pair_unchecked!(command_part.into_inner().skip(1)).as_str(),
                         )));
                     }
                     Rule::command_gosub => {
                         prog.commands.push(Command::Gosub(Identifier(
-                            next_pair!(command_part.into_inner().skip(1)).as_str(),
+                            next_pair_unchecked!(command_part.into_inner().skip(1)).as_str(),
                         )));
                     }
                     Rule::command_if_then => {
                         let mut kwords = command_part.into_inner();
                         if_indices.push(prog.commands.len());
                         prog.commands.push(Command::If {
-                            i1: next_pair!(kwords).try_into()?,
-                            op: next_pair!(kwords).try_into()?,
-                            i2: next_pair!(kwords).try_into()?,
+                            i1: next_pair_unchecked!(kwords).try_into()?,
+                            op: next_pair_unchecked!(kwords).try_into()?,
+                            i2: next_pair_unchecked!(kwords).try_into()?,
                             n_commands: 0,
                         });
                     }
                     Rule::command_set => {
                         let mut kwords = command_part.into_inner();
                         prog.commands.push(Command::Set {
-                            var: Identifier(next_pair!(kwords).as_str()),
-                            i1: next_pair!(kwords).try_into()?,
-                            op: next_pair!(kwords).try_into()?,
-                            i2: next_pair!(kwords).try_into()?,
+                            var: Identifier(next_pair_unchecked!(kwords).as_str()),
+                            i1: next_pair_unchecked!(kwords).try_into()?,
+                            op: next_pair_unchecked!(kwords).try_into()?,
+                            i2: next_pair_unchecked!(kwords).try_into()?,
                         });
                     }
                     Rule::label => {
-                        let label = next_pair!(command_part.into_inner());
+                        let label = next_pair_unchecked!(command_part.into_inner());
                         if label.as_span().start_pos().line_col().1 != 0 {
-                            return Err(Error::LabelIndentationError(label));
+                            return Err(Error::LabelIndentationError(label.into(), label.as_str()));
                         }
                         prog.labels
                             .insert(Identifier(label.as_str()), prog.commands.len());

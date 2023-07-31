@@ -18,7 +18,7 @@ command_func    = ${
 command_goto    = ${ ^"Goto" ~ whitespace_or_comment* ~ identifier ~ ":"? }
 command_gosub   = ${ ^"Gosub" ~ whitespace_or_comment* ~ identifier }
 command_if_then = ${ ^"If" ~ whitespace_gz ~ (integer | identifier) ~ whitespace_or_comment* ~ logical_operator ~ whitespace_or_comment* ~ (integer | identifier) ~ whitespace_gz ~ ^"Then" }
-command_set     = ${ ^"Set" ~ whitespace_gz ~ identifier ~ whitespace_or_comment ~ "=" ~ whitespace_or_comment ~ ((integer | identifier) ~ whitespace_or_comment ~ math_operator ~ whitespace_or_comment ~ (integer | identifier) | integer) }
+command_set     = ${ ^"Set" ~ whitespace_gz ~ identifier ~ whitespace_or_comment* ~ "=" ~ whitespace_or_comment* ~ ((integer | identifier) ~ whitespace_or_comment* ~ math_operator ~ whitespace_or_comment* ~ (integer | identifier) | integer) }
 label           = ${ identifier ~ ":" }
 
 logical_operator = { "=" | "<" | ">" | "<=" | ">=" | "<>" }
