@@ -1,14 +1,10 @@
-command_list = @{ SOI ~ (whitespace_or_comment* ~ newline | command_group)* ~ EOI }
+program = @{ SOI ~ (whitespace_or_comment* ~ newline | command_group)* ~ EOI }
 
 command_group = ${ whitespace_or_comment* ~ (command ~ whitespace_gz)* ~ command? ~ whitespace_or_comment* ~ newline }
 
 command = ${
-  | "Beep"
-  | "DrawBackground"
-  | "End"
-  | "Return"
-  | kword_command_func ~ whitespace_or_comment* ~ "(" ~ whitespace_or_comment* ~ ")"
-  | kword_command_func ~ whitespace_or_comment* ~ "(" ~ whitespace_or_comment* ~ ((integer | string | identifier) ~ whitespace_or_comment* ~ "," ~ whitespace_or_comment*)* ~ (integer | string | identifier) ~ whitespace_or_comment* ~ ")"
+    kword_command_nfunc
+  | command_func
   | command_goto
   | command_gosub
   | command_if_then
@@ -16,50 +12,149 @@ command = ${
   | label
 }
 
-command_goto = ${"Goto" ~ whitespace_or_comment* ~ identifier ~ ":"?}
-command_gosub = ${"Gosub" ~ whitespace_or_comment* ~ identifier}
-command_if_then = ${"If" ~ whitespace_gz ~ (integer | identifier) ~ whitespace_or_comment* ~ logical_operator ~ whitespace_or_comment* ~ (integer | identifier) ~ whitespace_gz ~ "Then"}
-command_set = ${"Set" ~ whitespace_gz ~ identifier ~ whitespace_or_comment ~ "=" ~ whitespace_or_comment ~ ( (integer | identifier) ~ whitespace_or_comment ~ math_operator ~ whitespace_or_comment ~ (integer | identifier) | integer)}
-label = ${identifier ~ ":"}
+command_func    = ${
+    kword_command_func ~ whitespace_or_comment* ~ "(" ~ whitespace_or_comment* ~ ")"
+  | kword_command_func ~ whitespace_or_comment* ~ "(" ~ whitespace_or_comment* ~ ((integer | string | identifier | token) ~ whitespace_or_comment* ~ "," ~ whitespace_or_comment*)* ~ (integer | string | identifier | token) ~ whitespace_or_comment* ~ ")"}
+command_goto    = ${ ^"Goto" ~ whitespace_or_comment* ~ identifier ~ ":"? }
+command_gosub   = ${ ^"Gosub" ~ whitespace_or_comment* ~ identifier }
+command_if_then = ${ ^"If" ~ whitespace_gz ~ (integer | identifier) ~ whitespace_or_comment* ~ logical_operator ~ whitespace_or_comment* ~ (integer | identifier) ~ whitespace_gz ~ ^"Then" }
+command_set     = ${ ^"Set" ~ whitespace_gz ~ identifier ~ whitespace_or_comment ~ "=" ~ whitespace_or_comment ~ ((integer | identifier) ~ whitespace_or_comment ~ math_operator ~ whitespace_or_comment ~ (integer | identifier) | integer) }
+label           = ${ identifier ~ ":" }
 
 logical_operator = { "=" | "<" | ">" | "<=" | ">=" | "<>" }
-math_operator = { "+" | "-" | "*" | "/" }
+math_operator    = { "+" | "-" | "*" | "/" }
 
-kword_command_func  = {
-    "DrawArc"
-  | "DrawBitmap"
-  | "DrawChord"
-  | "DrawEllipse"
-  | "DrawFlood"
-  | "DrawLine"
-  | "DrawNumber"
-  | "DrawPie"
-  | "DrawRectanble"
-  | "DrawRoundRectangle"
-  | "DrawSizedBitmap"
-  | "DrawText"
-  | "MessageBox"
-  | "Run"
-  | "SetKeyboard"
-  | "SetMenu"
-  | "SetMouse"
-  | "SetWaitMode"
-  | "SetWindow"
-  | "UseBackground"
-  | "UseBrush"
-  | "UseCaption"
-  | "UseCoordinates"
-  | "UseFont"
-  | "UsePen"
-  | "WaitInput"
+kword_command_func = {
+    ^"DrawArc"
+  | ^"DrawBitmap"
+  | ^"DrawChord"
+  | ^"DrawEllipse"
+  | ^"DrawFlood"
+  | ^"DrawLine"
+  | ^"DrawNumber"
+  | ^"DrawPie"
+  | ^"DrawRectangle"
+  | ^"DrawRoundRectangle"
+  | ^"DrawSizedBitmap"
+  | ^"DrawText"
+  | ^"MessageBox"
+  | ^"Run"
+  | ^"SetKeyboard"
+  | ^"SetMenu"
+  | ^"SetMouse"
+  | ^"SetWaitMode"
+  | ^"SetWindow"
+  | ^"UseBackground"
+  | ^"UseBrush"
+  | ^"UseCaption"
+  | ^"UseCoordinates"
+  | ^"UseFont"
+  | ^"UsePen"
+  | ^"WaitInput"
+}
+
+kword_command_nfunc = {
+    ^"Beep"
+  | ^"DrawBackground"
+  | ^"End"
+  | ^"Return"
+}
+
+token = {
+    "OK"
+  | "OKCANCEL"
+  | "YESNO"
+  | "YESNOCANCEL"
+  | "INFORMATION"
+  | "EXCLAMATION"
+  | "QUESTION"
+  | "STOP"
+  | "NOICON"
+  | "IGNORE"
+  | "NULL"
+  | "FOCUS"
+  | "MAXIMIZE"
+  | "MINIMIZE"
+  | "RESTORE"
+  | "OPAQUE"
+  | "TRANSPARENT"
+  | "SOLID"
+  | "DIAGONALUP"
+  | "DIAGONALDOWN"
+  | "DIAGONALCROSS"
+  | "HORIZONTAL"
+  | "VERTICAL"
+  | "CROSS"
+  | "PIXEL"
+  | "METRIC"
+  | "BOLD"
+  | "NOBOLD"
+  | "ITALIC"
+  | "NOITALIC"
+  | "UNDERLINE"
+  | "NOUNDERLINE"
+  | "DASH"
+  | "DOT"
+  | "DASHDOT"
+  | "DASHDOTDOT"
+}
+
+kword_token = {
+    ^"OK"
+  | ^"OKCANCEL"
+  | ^"YESNO"
+  | ^"YESNOCANCEL"
+  | ^"INFORMATION"
+  | ^"EXCLAMATION"
+  | ^"QUESTION"
+  | ^"STOP"
+  | ^"NOICON"
+  | ^"IGNORE"
+  | ^"NULL"
+  | ^"FOCUS"
+  | ^"MAXIMIZE"
+  | ^"MINIMIZE"
+  | ^"RESTORE"
+  | ^"OPAQUE"
+  | ^"TRANSPARENT"
+  | ^"SOLID"
+  | ^"DIAGONALUP"
+  | ^"DIAGONALDOWN"
+  | ^"DIAGONALCROSS"
+  | ^"HORIZONTAL"
+  | ^"VERTICAL"
+  | ^"CROSS"
+  | ^"PIXEL"
+  | ^"METRIC"
+  | ^"BOLD"
+  | ^"NOBOLD"
+  | ^"ITALIC"
+  | ^"NOITALIC"
+  | ^"UNDERLINE"
+  | ^"NOUNDERLINE"
+  | ^"DASH"
+  | ^"DOT"
+  | ^"DASHDOT"
+  | ^"DASHDOTDOT"
+}
+
+kword_reserved = {
+    kword_command_func
+  | kword_command_nfunc
+  | kword_token
+  | ^"Goto"
+  | ^"Gosub"
+  | ^"Return"
+  | ^"If"
+  | ^"Then"
 }
 
 integer    = @{ ASCII_DIGIT+ }
-string = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
+string     = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+identifier = @{ !(kword_reserved) ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
 
-newline         = _{ NEWLINE }
+newline               = _{ NEWLINE }
 whitespace            = _{ " " | "\t" | "\r" | "|" }
 comment               = _{ "{" ~ (!"}" ~ ANY)* ~ "}" }
 whitespace_or_comment = _{ whitespace | comment }
-whitespace_gz = _{comment* ~ whitespace ~ whitespace_or_comment*}
+whitespace_gz         = _{ comment* ~ whitespace ~ whitespace_or_comment* }

@@ -5,3 +5,5 @@ edition = "2021"
 
 [dependencies]
 pest = "2.7.1"
+pest_derive = { version = "2.7.1", features = ["grammar-extras"] }
+thiserror = "1.0.44"
