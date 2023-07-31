@@ -140,9 +140,9 @@ make_enum_impl_from_str!(
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Identifier<'a>(pub &'a str);
 
-impl<'a> From<&'a str> for Identifier<'a> {
-    fn from(value: &'a str) -> Self {
-        Identifier(value)
+impl<'a> From<&Pair<'a, Rule>> for Identifier<'a> {
+    fn from(value: &Pair<'a, Rule>) -> Self {
+        Identifier(value.as_str())
     }
 }
 
@@ -494,7 +494,7 @@ impl<'a> Command<'a> {
                 while kwords.peek().is_some() {
                     params.push(SetKeyboardParam {
                         key: next_pair_str_lit!(kwords),
-                        label: next_pair!(kwords).as_str().into(),
+                        label: next_pair!(kwords).into(),
                     });
                 }
                 Command::SetKeyboard(params)
@@ -508,9 +508,9 @@ impl<'a> Command<'a> {
                         y1: next_pair!(kwords).try_into()?,
                         x2: next_pair!(kwords).try_into()?,
                         y2: next_pair!(kwords).try_into()?,
-                        label: next_pair!(kwords).as_str().into(),
-                        x: next_pair!(kwords).as_str().into(),
-                        y: next_pair!(kwords).as_str().into(),
+                        label: next_pair!(kwords).into(),
+                        x: next_pair!(kwords).into(),
+                        y: next_pair!(kwords).into(),
                     });
                 }
                 Command::SetMouse(params)
@@ -645,6 +645,8 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
             }
         }
     }
+
+    prog.commands.push(Command::End);
 
     Ok(prog)
 }
