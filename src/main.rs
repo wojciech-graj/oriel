@@ -1,6 +1,8 @@
 use std::{env, fs::read_to_string};
 
+mod ir;
 mod parse;
+mod vm;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

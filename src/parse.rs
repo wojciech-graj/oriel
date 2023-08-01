@@ -8,6 +8,8 @@ use pest_derive::Parser;
 
 use thiserror::Error;
 
+pub use crate::ir::*;
+
 #[derive(Parser)]
 #[grammar = "oriel.pest"]
 struct IdentParser;
@@ -33,14 +35,10 @@ macro_rules! next_pair_str_lit {
     }};
 }
 
-macro_rules! make_enum_impl_from_str {
+macro_rules! enum_impl_from_str {
     (
         $name:ident, $( ( $variant:ident, $str_rep:literal ) ),*
     ) => {
-        #[derive(Debug)]
-        pub enum $name {
-            $( $variant, )*
-        }
         impl<'a> TryFrom<&Pair<'a, Rule>> for $name {
             type Error = Error<'a>;
             fn try_from(value: &Pair<'a, Rule>) -> Result<Self, Self::Error> {
@@ -53,7 +51,7 @@ macro_rules! make_enum_impl_from_str {
     };
 }
 
-make_enum_impl_from_str!(
+enum_impl_from_str!(
     LogicalOperator,
     (Equal, "="),
     (Less, "<"),
@@ -63,7 +61,7 @@ make_enum_impl_from_str!(
     (NEqual, "<>")
 );
 
-make_enum_impl_from_str!(
+enum_impl_from_str!(
     MathOperator,
     (Add, "+"),
     (Subtract, "-"),
@@ -71,7 +69,7 @@ make_enum_impl_from_str!(
     (Divide, "/")
 );
 
-make_enum_impl_from_str!(
+enum_impl_from_str!(
     MessageBoxType,
     (Ok, "OK"),
     (OkCancel, "OKCANCEL"),
@@ -79,7 +77,7 @@ make_enum_impl_from_str!(
     (YesNoCancel, "YESNOCANCEL")
 );
 
-make_enum_impl_from_str!(
+enum_impl_from_str!(
     MessageBoxIcon,
     (Information, "INFORMATION"),
     (Exclamation, "EXCLAMATION"),
@@ -88,20 +86,20 @@ make_enum_impl_from_str!(
     (NoIcon, "NOICON")
 );
 
-make_enum_impl_from_str!(
+enum_impl_from_str!(
     SetWindowOption,
     (Maximize, "MAXIMIZE"),
     (Minimize, "MINIMIZE"),
     (Restore, "RESTORE")
 );
 
-make_enum_impl_from_str!(
+enum_impl_from_str!(
     UseBackgroundOption,
     (Opaque, "OPAQUE"),
     (Transparent, "TRANSPARENT")
 );
 
-make_enum_impl_from_str!(
+enum_impl_from_str!(
     UseBrushOption,
     (Solid, "SOLID"),
     (DiagonalUp, "DIAGONALUP"),
@@ -113,11 +111,11 @@ make_enum_impl_from_str!(
     (Null, "NULL")
 );
 
-make_enum_impl_from_str!(UseCoordinatesOption, (Pixel, "PIXEL"), (Metric, "METRIC"));
+enum_impl_from_str!(UseCoordinatesOption, (Pixel, "PIXEL"), (Metric, "METRIC"));
 
-make_enum_impl_from_str!(WaitMode, (Null, "NULL"), (Focus, "FOCUS"));
+enum_impl_from_str!(WaitMode, (Null, "NULL"), (Focus, "FOCUS"));
 
-make_enum_impl_from_str!(
+enum_impl_from_str!(
     UsePenOption,
     (Solid, "SOLID"),
     (Null, "NULL"),
@@ -127,29 +125,20 @@ make_enum_impl_from_str!(
     (DashDotDot, "DASHDOTDOT")
 );
 
-make_enum_impl_from_str!(UseFontBold, (Bold, "BOLD"), (NoBold, "NOBOLD"));
+enum_impl_from_str!(UseFontBold, (Bold, "BOLD"), (NoBold, "NOBOLD"));
 
-make_enum_impl_from_str!(UseFontItalic, (Italic, "ITALIC"), (NoItalic, "NOITALIC"));
+enum_impl_from_str!(UseFontItalic, (Italic, "ITALIC"), (NoItalic, "NOITALIC"));
 
-make_enum_impl_from_str!(
+enum_impl_from_str!(
     UseFontUnderline,
     (Underline, "UNDERLINE"),
     (NoUnderline, "NOUNDERLINE")
 );
 
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct Identifier<'a>(pub &'a str);
-
 impl<'a> From<&Pair<'a, Rule>> for Identifier<'a> {
     fn from(value: &Pair<'a, Rule>) -> Self {
         Identifier(value.as_str())
     }
-}
-
-#[derive(Debug)]
-pub enum Integer<'a> {
-    Literal(u16),
-    Variable(Identifier<'a>),
 }
 
 impl<'a> TryFrom<&Pair<'a, Rule>> for Integer<'a> {
@@ -166,177 +155,6 @@ impl<'a> TryFrom<&Pair<'a, Rule>> for Integer<'a> {
             _ => unreachable!(),
         }
     }
-}
-
-#[derive(Debug)]
-pub struct SetKeyboardParam<'a> {
-    pub key: &'a str,
-    pub label: Identifier<'a>,
-}
-
-#[derive(Debug)]
-pub struct SetMouseParam<'a> {
-    pub x1: Integer<'a>,
-    pub y1: Integer<'a>,
-    pub x2: Integer<'a>,
-    pub y2: Integer<'a>,
-    pub label: Identifier<'a>,
-    pub x: Identifier<'a>,
-    pub y: Identifier<'a>,
-}
-
-#[derive(Debug)]
-pub enum Command<'a> {
-    Beep,
-    DrawArc {
-        x1: Integer<'a>,
-        y1: Integer<'a>,
-        x2: Integer<'a>,
-        y2: Integer<'a>,
-        x3: Integer<'a>,
-        y3: Integer<'a>,
-        x4: Integer<'a>,
-        y4: Integer<'a>,
-    },
-    DrawBackground,
-    DrawBitmap {
-        x: Integer<'a>,
-        y: Integer<'a>,
-        filename: &'a str,
-    },
-    DrawChord {
-        x1: Integer<'a>,
-        y1: Integer<'a>,
-        x2: Integer<'a>,
-        y2: Integer<'a>,
-        x3: Integer<'a>,
-        y3: Integer<'a>,
-        x4: Integer<'a>,
-        y4: Integer<'a>,
-    },
-    DrawEllipse {
-        x1: Integer<'a>,
-        y1: Integer<'a>,
-        x2: Integer<'a>,
-        y2: Integer<'a>,
-    },
-    DrawFlood {
-        x: Integer<'a>,
-        y: Integer<'a>,
-        r: Integer<'a>,
-        g: Integer<'a>,
-        b: Integer<'a>,
-    },
-    DrawLine {
-        x1: Integer<'a>,
-        y1: Integer<'a>,
-        x2: Integer<'a>,
-        y2: Integer<'a>,
-    },
-    DrawNumber {
-        x: Integer<'a>,
-        y: Integer<'a>,
-        n: Integer<'a>,
-    },
-    DrawPie {
-        x1: Integer<'a>,
-        y1: Integer<'a>,
-        x2: Integer<'a>,
-        y2: Integer<'a>,
-        x3: Integer<'a>,
-        y3: Integer<'a>,
-        x4: Integer<'a>,
-        y4: Integer<'a>,
-    },
-    DrawRectangle {
-        x1: Integer<'a>,
-        y1: Integer<'a>,
-        x2: Integer<'a>,
-        y2: Integer<'a>,
-    },
-    DrawRoundRectangle {
-        x1: Integer<'a>,
-        y1: Integer<'a>,
-        x2: Integer<'a>,
-        y2: Integer<'a>,
-        x3: Integer<'a>,
-        y3: Integer<'a>,
-    },
-    DrawSizedBitmap {
-        x1: Integer<'a>,
-        y1: Integer<'a>,
-        x2: Integer<'a>,
-        y2: Integer<'a>,
-        filename: &'a str,
-    },
-    DrawText {
-        x: Integer<'a>,
-        y: Integer<'a>,
-        text: &'a str,
-    },
-    End,
-    Gosub(Identifier<'a>),
-    Return,
-    Goto(Identifier<'a>),
-    If {
-        i1: Integer<'a>,
-        op: LogicalOperator,
-        i2: Integer<'a>,
-        goto_false: usize,
-    },
-    MessageBox {
-        typ: MessageBoxType,
-        default_button: Integer<'a>,
-        icon: MessageBoxIcon,
-        text: &'a str,
-        caption: &'a str,
-        button_pushed: Identifier<'a>,
-    },
-    Run(&'a str),
-    Set {
-        var: Identifier<'a>,
-        i1: Integer<'a>,
-        op: MathOperator,
-        i2: Integer<'a>,
-    },
-    SetKeyboard(Vec<SetKeyboardParam<'a>>),
-    SetMenu(), // TODO
-    SetMouse(Vec<SetMouseParam<'a>>),
-    SetWaitMode(WaitMode),
-    SetWindow(SetWindowOption),
-    UseBackground {
-        option: UseBackgroundOption,
-        r: Integer<'a>,
-        g: Integer<'a>,
-        b: Integer<'a>,
-    },
-    UseBrush {
-        option: UseBrushOption,
-        r: Integer<'a>,
-        g: Integer<'a>,
-        b: Integer<'a>,
-    },
-    UseCaption(&'a str),
-    UseCoordinates(UseCoordinatesOption),
-    UseFont {
-        name: &'a str,
-        width: Integer<'a>,
-        height: Integer<'a>,
-        bold: UseFontBold,
-        italic: UseFontItalic,
-        underline: UseFontUnderline,
-        r: Integer<'a>,
-        g: Integer<'a>,
-        b: Integer<'a>,
-    },
-    UsePen {
-        option: UsePenOption,
-        width: Integer<'a>,
-        r: Integer<'a>,
-        g: Integer<'a>,
-        b: Integer<'a>,
-    },
-    WaitInput(Option<Integer<'a>>),
 }
 
 #[derive(Debug)]
@@ -563,11 +381,6 @@ impl<'a> Command<'a> {
             Ok(command)
         }
     }
-}
-
-pub struct Program<'a> {
-    pub commands: Vec<Command<'a>>,
-    pub labels: HashMap<Identifier<'a>, usize>,
 }
 
 pub fn parse(src: &str) -> Result<Program<'_>, Error> {
