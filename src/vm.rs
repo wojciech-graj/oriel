@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::parse;
+use thiserror::Error;
+
+use crate::ir::*;
 
 trait VMCtx {
     fn beep(&mut self);
@@ -29,9 +31,9 @@ trait VMCtx {
     fn draw_text(&mut self, x: u16, y: u16, text: &str);
     fn message_box(
         &mut self,
-        typ: parse::MessageBoxType,
+        typ: MessageBoxType,
         default_button: u16,
-        icon: parse::MessageBoxIcon,
+        icon: MessageBoxIcon,
         text: &str,
         caption: &str,
     ) -> u16;
@@ -39,46 +41,377 @@ trait VMCtx {
     fn set_keyboard(&mut self); // TODO
     fn set_menu(&mut self); // TODO
     fn set_mouse(&mut self); // TODO
-    fn set_wait_mode(&mut self, mode: parse::WaitMode);
-    fn set_window(&mut self, option: parse::SetWindowOption);
-    fn use_background(&mut self, option: parse::UseBackgroundOption, r: u16, g: u16, g: u16);
-    fn use_brush(&mut self, option: parse::UseBrushOption, r: u16, g: u16, b: u16);
+    fn set_wait_mode(&mut self, mode: WaitMode);
+    fn set_window(&mut self, option: SetWindowOption);
+    fn use_background(&mut self, option: UseBackgroundOption, r: u16, g: u16, g: u16);
+    fn use_brush(&mut self, option: UseBrushOption, r: u16, g: u16, b: u16);
     fn use_caption(&mut self, text: &str);
-    fn use_coordinates(&mut self, option: parse::UseCoordinatesOption); // TODO: maybe?
+    fn use_coordinates(&mut self, option: UseCoordinatesOption); // TODO: maybe?
     fn use_font(
         &mut self,
         name: &str,
         width: u16,
         height: u16,
-        bold: parse::UseFontBold,
-        italic: parse::UseFontItalic,
-        underline: parse::UseFontUnderline,
+        bold: UseFontBold,
+        italic: UseFontItalic,
+        underline: UseFontUnderline,
         r: u16,
         g: u16,
         b: u16,
     );
-    fn use_pen(&mut self, option: parse::UsePenOption, width: u16, r: u16, g: u16, b: u16);
+    fn use_pen(&mut self, option: UsePenOption, width: u16, r: u16, g: u16, b: u16);
     fn wait_input(&mut self, milliseconds: Option<u16>);
 }
 
+pub enum Status {
+    Ok,
+    End,
+}
+
+#[allow(clippy::enum_variant_names)]
+#[derive(Error, Debug)]
+pub enum Error<'a> {
+    #[error("Attempted to use undeclared variable '{}'", (.0).0)]
+    UndeclaredVariableError(Identifier<'a>),
+    #[error("Call stack exhausted")]
+    CallStackExhaustedError,
+    #[error("Integer Under/Over-flow")]
+    MathOperationError,
+}
+
 pub struct VM<'a> {
-    program: parse::Program<'a>,
+    program: Program<'a>,
     ip: usize,
-    vars: HashMap<parse::Identifier<'a>, u16>,
+    vars: HashMap<Identifier<'a>, u16>,
+    call_stack: Vec<usize>,
     ctx: &'a mut dyn VMCtx,
 }
 
+macro_rules! integer_value {
+    ($self:ident, $id:ident) => {{
+        $self.get_integer($id).ok_or_else(|| {
+            Error::UndeclaredVariableError(match $id {
+                Integer::Variable(id) => id,
+                Integer::Literal(_) => unreachable!(),
+            })
+        })?
+    }};
+}
+
+macro_rules! incr_ip {
+    ($self:ident, $e:expr) => {{
+        $e;
+        $self.ip += 1;
+    }};
+}
+
 impl<'a> VM<'a> {
-    fn new(program: parse::Program<'a>, ctx: &'a mut dyn VMCtx) -> Self {
+    fn new(program: Program<'a>, ctx: &'a mut dyn VMCtx) -> Self {
         VM {
             program,
             ip: 0,
             vars: HashMap::new(),
+            call_stack: Vec::new(),
             ctx,
         }
     }
 
-    fn step(&mut self) {}
+    fn get_integer(&self, i: Integer) -> Option<u16> {
+        match i {
+            Integer::Literal(val) => Some(val),
+            Integer::Variable(ref ident) => self.vars.get(ident).cloned(),
+        }
+    }
 
-    fn run(&mut self) {}
+    fn set_variable(&mut self, ident: Identifier<'a>, val: u16) {
+        self.vars.insert(ident, val);
+    }
+
+    fn step(&mut self) -> Result<Status, Error> {
+        match self.program.commands[self.ip] {
+            Command::Beep => incr_ip!(self, self.ctx.beep()),
+            Command::DrawArc {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+                x4,
+                y4,
+            } => incr_ip!(
+                self,
+                self.ctx.draw_arc(
+                    integer_value!(self, x1),
+                    integer_value!(self, y1),
+                    integer_value!(self, x2),
+                    integer_value!(self, y2),
+                    integer_value!(self, x3),
+                    integer_value!(self, y3),
+                    integer_value!(self, x4),
+                    integer_value!(self, y4),
+                )
+            ),
+            Command::DrawBackground => incr_ip!(self, self.ctx.draw_background()),
+            Command::DrawBitmap { x, y, filename } => incr_ip!(
+                self,
+                self.ctx
+                    .draw_bitmap(integer_value!(self, x), integer_value!(self, y), filename)
+            ),
+            Command::DrawChord {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+                x4,
+                y4,
+            } => incr_ip!(
+                self,
+                self.ctx.draw_chord(
+                    integer_value!(self, x1),
+                    integer_value!(self, y1),
+                    integer_value!(self, x2),
+                    integer_value!(self, y2),
+                    integer_value!(self, x3),
+                    integer_value!(self, y3),
+                    integer_value!(self, x4),
+                    integer_value!(self, y4),
+                )
+            ),
+            Command::DrawEllipse { x1, y1, x2, y2 } => incr_ip!(
+                self,
+                self.ctx.draw_ellipse(
+                    integer_value!(self, x1),
+                    integer_value!(self, y1),
+                    integer_value!(self, x2),
+                    integer_value!(self, y2),
+                )
+            ),
+            Command::DrawFlood { x, y, r, g, b } => incr_ip!(
+                self,
+                self.ctx.draw_flood(
+                    integer_value!(self, x),
+                    integer_value!(self, y),
+                    integer_value!(self, r),
+                    integer_value!(self, g),
+                    integer_value!(self, b),
+                )
+            ),
+            Command::DrawLine { x1, y1, x2, y2 } => incr_ip!(
+                self,
+                self.ctx.draw_line(
+                    integer_value!(self, x1),
+                    integer_value!(self, y1),
+                    integer_value!(self, x2),
+                    integer_value!(self, y2),
+                )
+            ),
+            Command::DrawNumber { x, y, n } => incr_ip!(
+                self,
+                self.ctx.draw_number(
+                    integer_value!(self, x),
+                    integer_value!(self, y),
+                    integer_value!(self, n),
+                )
+            ),
+            Command::DrawPie {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+                x4,
+                y4,
+            } => incr_ip!(
+                self,
+                self.ctx.draw_pie(
+                    integer_value!(self, x1),
+                    integer_value!(self, y1),
+                    integer_value!(self, x2),
+                    integer_value!(self, y2),
+                    integer_value!(self, x3),
+                    integer_value!(self, y3),
+                    integer_value!(self, x4),
+                    integer_value!(self, y4),
+                )
+            ),
+            Command::DrawRectangle { x1, y1, x2, y2 } => incr_ip!(
+                self,
+                self.ctx.draw_rectangle(
+                    integer_value!(self, x1),
+                    integer_value!(self, y1),
+                    integer_value!(self, x2),
+                    integer_value!(self, y2),
+                )
+            ),
+            Command::DrawRoundRectangle {
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+            } => incr_ip!(
+                self,
+                self.ctx.draw_round_rectangle(
+                    integer_value!(self, x1),
+                    integer_value!(self, y1),
+                    integer_value!(self, x2),
+                    integer_value!(self, y2),
+                    integer_value!(self, x3),
+                    integer_value!(self, y3),
+                )
+            ),
+            Command::DrawSizedBitmap {
+                x1,
+                y1,
+                x2,
+                y2,
+                filename,
+            } => incr_ip!(
+                self,
+                self.ctx.draw_sized_bitmap(
+                    integer_value!(self, x1),
+                    integer_value!(self, y1),
+                    integer_value!(self, x2),
+                    integer_value!(self, y2),
+                    filename,
+                )
+            ),
+            Command::DrawText { x, y, text } => incr_ip!(
+                self,
+                self.ctx
+                    .draw_text(integer_value!(self, x), integer_value!(self, y), text)
+            ),
+            Command::End => return Ok(Status::End),
+            Command::Gosub(ref ident) => {
+                self.call_stack.push(self.ip + 1);
+                self.ip = *(self.program.labels.get(ident).unwrap());
+            }
+            Command::Return => {
+                self.ip = self
+                    .call_stack
+                    .pop()
+                    .ok_or_else(|| Error::CallStackExhaustedError)?
+            }
+            Command::Goto(ref ident) => self.ip = *(self.program.labels.get(ident).unwrap()),
+            Command::If {
+                i1,
+                op,
+                i2,
+                goto_false,
+            } => {
+                self.ip = if !op.cmp(integer_value!(self, i1), integer_value!(self, i2)) {
+                    goto_false
+                } else {
+                    self.ip + 1
+                }
+            }
+            Command::MessageBox {
+                typ,
+                default_button,
+                icon,
+                text,
+                caption,
+                button_pushed,
+            } => {
+                let button_pushed_val = self.ctx.message_box(
+                    typ,
+                    integer_value!(self, default_button),
+                    icon,
+                    text,
+                    caption,
+                );
+                incr_ip!(self, self.set_variable(button_pushed, button_pushed_val));
+            }
+            Command::Run(command) => incr_ip!(self, self.ctx.run(command)),
+            Command::Set { var, i1, op, i2 } => incr_ip!(
+                self,
+                self.set_variable(
+                    var,
+                    op.eval(integer_value!(self, i1), integer_value!(self, i2))
+                        .ok_or_else(|| Error::MathOperationError)?,
+                )
+            ),
+            Command::SetKeyboard(_) => return Ok(Status::Ok), //TODO
+            Command::SetMenu() => return Ok(Status::Ok),      //TODO
+            Command::SetMouse(_) => return Ok(Status::Ok),    //TODO
+            Command::SetWaitMode(mode) => incr_ip!(self, self.ctx.set_wait_mode(mode)),
+            Command::SetWindow(option) => incr_ip!(self, self.ctx.set_window(option)),
+            Command::UseBackground { option, r, g, b } => incr_ip!(
+                self,
+                self.ctx.use_background(
+                    option,
+                    integer_value!(self, r),
+                    integer_value!(self, g),
+                    integer_value!(self, b),
+                )
+            ),
+            Command::UseBrush { option, r, g, b } => incr_ip!(
+                self,
+                self.ctx.use_brush(
+                    option,
+                    integer_value!(self, r),
+                    integer_value!(self, g),
+                    integer_value!(self, b),
+                )
+            ),
+            Command::UseCaption(text) => incr_ip!(self, self.ctx.use_caption(text)),
+            Command::UseCoordinates(coordinates) => {
+                incr_ip!(self, self.ctx.use_coordinates(coordinates))
+            }
+            Command::UseFont {
+                name,
+                width,
+                height,
+                bold,
+                italic,
+                underline,
+                r,
+                g,
+                b,
+            } => incr_ip!(
+                self,
+                self.ctx.use_font(
+                    name,
+                    integer_value!(self, width),
+                    integer_value!(self, height),
+                    bold,
+                    italic,
+                    underline,
+                    integer_value!(self, r),
+                    integer_value!(self, g),
+                    integer_value!(self, b),
+                )
+            ),
+            Command::UsePen {
+                option,
+                width,
+                r,
+                g,
+                b,
+            } => incr_ip!(
+                self,
+                self.ctx.use_pen(
+                    option,
+                    integer_value!(self, width),
+                    integer_value!(self, r),
+                    integer_value!(self, g),
+                    integer_value!(self, b),
+                )
+            ),
+            Command::WaitInput(milliseconds) => incr_ip!(
+                self,
+                self.ctx.wait_input(if let Some(i) = milliseconds {
+                    Some(integer_value!(self, i))
+                } else {
+                    None
+                })
+            ),
+        };
+        Ok(Status::Ok)
+    }
 }

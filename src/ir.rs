@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum LogicalOperator {
     Equal,
     Less,
@@ -10,7 +10,20 @@ pub enum LogicalOperator {
     NEqual,
 }
 
-#[derive(Debug)]
+impl LogicalOperator {
+    pub fn cmp(&self, i1: u16, i2: u16) -> bool {
+        match self {
+            LogicalOperator::Equal => i1 == i2,
+            LogicalOperator::Less => i1 < i2,
+            LogicalOperator::Greater => i1 > i2,
+            LogicalOperator::LEqual => i1 <= i2,
+            LogicalOperator::GEqual => i1 >= i2,
+            LogicalOperator::NEqual => i1 != i2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum MathOperator {
     Add,
     Subtract,
@@ -18,7 +31,18 @@ pub enum MathOperator {
     Divide,
 }
 
-#[derive(Debug)]
+impl MathOperator {
+    pub fn eval(&self, i1: u16, i2: u16) -> Option<u16> {
+        (match self {
+            MathOperator::Add => u16::checked_add,
+            MathOperator::Subtract => u16::checked_sub,
+            MathOperator::Multiply => u16::checked_mul,
+            MathOperator::Divide => u16::checked_div,
+        })(i1, i2)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum MessageBoxType {
     Ok,
     OkCancel,
@@ -26,7 +50,7 @@ pub enum MessageBoxType {
     YesNoCancel,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum MessageBoxIcon {
     Information,
     Exclamation,
@@ -35,20 +59,20 @@ pub enum MessageBoxIcon {
     NoIcon,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum SetWindowOption {
     Maximize,
     Minimize,
     Restore,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UseBackgroundOption {
     Opaque,
     Transparent,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UseBrushOption {
     Solid,
     DiagonalUp,
@@ -60,19 +84,19 @@ pub enum UseBrushOption {
     Null,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UseCoordinatesOption {
     Pixel,
     Metric,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum WaitMode {
     Null,
     Focus,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UsePenOption {
     Solid,
     Null,
@@ -82,31 +106,31 @@ pub enum UsePenOption {
     DashDotDot,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UseFontBold {
     Bold,
     NoBold,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UseFontItalic {
     Italic,
     NoItalic,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum UseFontUnderline {
     Underline,
     NoUnderline,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct SetKeyboardParam<'a> {
     pub key: &'a str,
     pub label: Identifier<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct SetMouseParam<'a> {
     pub x1: Integer<'a>,
     pub y1: Integer<'a>,
@@ -117,10 +141,10 @@ pub struct SetMouseParam<'a> {
     pub y: Identifier<'a>,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Identifier<'a>(pub &'a str);
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Integer<'a> {
     Literal(u16),
     Variable(Identifier<'a>),
