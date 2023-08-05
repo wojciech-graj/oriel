@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::cmp::min;
 use std::f64::consts::PI;
 use std::process;
 use std::rc::Rc;
@@ -31,6 +30,7 @@ pub struct VMSysGtk {
     pen_type: ir::PenType,
     brush_type: ir::BrushType,
     wait_mode: ir::WaitMode,
+    scale: f64,
 }
 
 impl VMSysGtk {
@@ -126,6 +126,7 @@ impl VMSysGtk {
             pen_type: ir::PenType::Solid,
             brush_type: ir::BrushType::Null,
             wait_mode: ir::WaitMode::Null,
+            scale: 1.,
         };
 
         sys.use_coordinates(ir::Coordinates::Metric);
@@ -171,10 +172,10 @@ impl VMSysGtk {
 
     fn arc_path(
         &self,
-        x1: u16,
-        y1: u16,
-        x2: u16,
-        y2: u16,
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
         theta1: f64,
         theta2: f64,
         mv: bool,
@@ -182,8 +183,8 @@ impl VMSysGtk {
     ) -> (f64, f64) {
         const DTHETA: f64 = -0.1;
 
-        let sclx = ((x2 - x1) as f64) / 2.;
-        let scly = ((y2 - y1) as f64) / 2.;
+        let sclx = (x2 - x1) / 2.;
+        let scly = (y2 - y1) / 2.;
         let cx = ((x2 + x1) as f64) / 2.;
         let cy = ((y2 + y1) as f64) / 2.;
 
@@ -213,23 +214,37 @@ impl VMSysGtk {
 
     fn draw(&self) {
         let draw_ctx = self.draw_ctx.borrow();
-        draw_ctx.cr_brush.clip();
-        draw_ctx.cr_brush.paint().ok();
+        //draw_ctx.cr_brush.clip();
+        draw_ctx.cr_brush.fill().ok();
+        //draw_ctx.cr_brush.reset_clip();
         draw_ctx.cr_background.stroke().ok();
         draw_ctx.cr_pen.stroke().ok();
     }
+
+    fn scaled(&self, x: u16) -> f64 {
+        (x as f64) * self.scale
+    }
 }
 
-impl VMSys for VMSysGtk {
+impl<'a> VMSys<'a> for VMSysGtk {
     fn beep(&mut self) {
         self.window.window().unwrap().beep();
     }
 
     fn draw_arc(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16) {
-        let cx = ((x2 + x1) as f64) / 2.;
-        let cy = ((y2 + y1) as f64) / 2.;
-        let theta1 = ((y3 as f64) - cy).atan2((x3 as f64) - cx);
-        let theta2 = ((y4 as f64) - cy).atan2((x4 as f64) - cx);
+        let x1 = self.scaled(x1);
+        let y1 = self.scaled(y1);
+        let x2 = self.scaled(x2);
+        let y2 = self.scaled(y2);
+        let x3 = self.scaled(x3);
+        let y3 = self.scaled(y3);
+        let x4 = self.scaled(x4);
+        let y4 = self.scaled(y4);
+
+        let cx = (x2 + x1) / 2.;
+        let cy = (y2 + y1) / 2.;
+        let theta1 = (y3 - cy).atan2(x3 - cx);
+        let theta2 = (y4 - cy).atan2(x4 - cx);
 
         self.arc_path(x1, y1, x2, y2, theta1, theta2, true, false);
         self.line_exec(false, |ctx| {
@@ -244,6 +259,9 @@ impl VMSys for VMSysGtk {
     }
 
     fn draw_bitmap(&mut self, x: u16, y: u16, filename: &str) {
+        let x = self.scaled(x);
+        let y = self.scaled(y);
+
         let pixbuf = gdk_pixbuf::Pixbuf::from_file(filename).unwrap();
         let surface = pixbuf
             .create_surface(1, self.window.window().as_ref())
@@ -251,7 +269,7 @@ impl VMSys for VMSysGtk {
 
         let draw_ctx = self.draw_ctx.borrow();
         let cr = cairo::Context::new(draw_ctx.surface.as_ref()).unwrap();
-        cr.set_source_surface(&surface, x.into(), y.into()).ok();
+        cr.set_source_surface(&surface, x, y).ok();
         cr.paint().ok();
     }
 
@@ -266,10 +284,19 @@ impl VMSys for VMSysGtk {
         x4: u16,
         y4: u16,
     ) {
-        let cx = ((x2 + x1) as f64) / 2.;
-        let cy = ((y2 + y1) as f64) / 2.;
-        let theta1 = ((y3 as f64) - cy).atan2((x3 as f64) - cx);
-        let theta2 = ((y4 as f64) - cy).atan2((x4 as f64) - cx);
+        let x1 = self.scaled(x1);
+        let y1 = self.scaled(y1);
+        let x2 = self.scaled(x2);
+        let y2 = self.scaled(y2);
+        let x3 = self.scaled(x3);
+        let y3 = self.scaled(y3);
+        let x4 = self.scaled(x4);
+        let y4 = self.scaled(y4);
+
+        let cx = (x2 + x1) / 2.;
+        let cy = (y2 + y1) / 2.;
+        let theta1 = (y3 - cy).atan2(x3 - cx);
+        let theta2 = (y4 - cy).atan2(x4 - cx);
 
         let pts = self.arc_path(x1, y1, x2, y2, theta1, theta2, true, true);
         self.line_exec(true, |ctx| {
@@ -280,6 +307,11 @@ impl VMSys for VMSysGtk {
     }
 
     fn draw_ellipse(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) {
+        let x1 = self.scaled(x1);
+        let y1 = self.scaled(y1);
+        let x2 = self.scaled(x2);
+        let y2 = self.scaled(y2);
+
         self.arc_path(x1, y1, x2, y2, 6.28, 0.0, true, true);
         self.draw();
     }
@@ -289,9 +321,14 @@ impl VMSys for VMSysGtk {
     }
 
     fn draw_line(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) {
+        let x1 = self.scaled(x1);
+        let y1 = self.scaled(y1);
+        let x2 = self.scaled(x2);
+        let y2 = self.scaled(y2);
+
         self.line_exec(false, |ctx| {
-            ctx.move_to(x1.into(), y1.into());
-            ctx.line_to(x2.into(), y2.into());
+            ctx.move_to(x1, y1);
+            ctx.line_to(x2, y2);
         });
         self.line_exec(false, |ctx| {
             ctx.stroke().ok();
@@ -303,10 +340,19 @@ impl VMSys for VMSysGtk {
     }
 
     fn draw_pie(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16) {
-        let cx = ((x2 + x1) as f64) / 2.;
-        let cy = ((y2 + y1) as f64) / 2.;
-        let theta1 = ((y3 as f64) - cy).atan2((x3 as f64) - cx);
-        let theta2 = ((y4 as f64) - cy).atan2((x4 as f64) - cx);
+        let x1 = self.scaled(x1);
+        let y1 = self.scaled(y1);
+        let x2 = self.scaled(x2);
+        let y2 = self.scaled(y2);
+        let x3 = self.scaled(x3);
+        let y3 = self.scaled(y3);
+        let x4 = self.scaled(x4);
+        let y4 = self.scaled(y4);
+
+        let cx = (x2 + x1) / 2.;
+        let cy = (y2 + y1) / 2.;
+        let theta1 = (y3 - cy).atan2(x3 - cx);
+        let theta2 = (y4 - cy).atan2(x4 - cx);
 
         let pts = self.arc_path(x1, y1, x2, y2, theta1, theta2, true, true);
         self.line_exec(true, |ctx| {
@@ -317,42 +363,59 @@ impl VMSys for VMSysGtk {
     }
 
     fn draw_rectangle(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) {
+        let x1 = self.scaled(x1);
+        let y1 = self.scaled(y1);
+        let x2 = self.scaled(x2);
+        let y2 = self.scaled(y2);
+
         self.line_exec(true, |ctx| {
-            ctx.move_to(x1.into(), y1.into());
-            ctx.line_to(x2.into(), y1.into());
-            ctx.line_to(x2.into(), y2.into());
-            ctx.line_to(x1.into(), y2.into());
-            ctx.line_to(x1.into(), y1.into());
+            ctx.move_to(x1, y1);
+            ctx.line_to(x2, y1);
+            ctx.line_to(x2, y2);
+            ctx.line_to(x1, y2);
+            ctx.line_to(x1, y1);
         });
         self.draw();
     }
 
     fn draw_round_rectangle(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16) {
+        let x1 = self.scaled(x1);
+        let y1 = self.scaled(y1);
+        let x2 = self.scaled(x2);
+        let y2 = self.scaled(y2);
+        let x3 = self.scaled(x3);
+        let y3 = self.scaled(y3);
+
         self.arc_path(x1, y1, x1 + x3, y1 + y3, PI * 1.5, PI, false, true);
         self.line_exec(true, |ctx| {
-            ctx.line_to(x1.into(), (y2 as f64) - (y3 as f64) / 2.);
+            ctx.line_to(x1, y2 - y3 / 2.);
         });
         self.arc_path(x1, y2 - y3, x1 + x3, y2, PI, PI * 0.5, false, true);
         self.line_exec(true, |ctx| {
-            ctx.line_to((x2 as f64) - (x3 as f64) / 2., y2.into());
+            ctx.line_to(x2 - x3 / 2., y2);
         });
         self.arc_path(x2 - x3, y2 - y3, x2, y2, PI * 0.5, 0., false, true);
         self.line_exec(true, |ctx| {
-            ctx.line_to(x2.into(), (y1 as f64) + (y3 as f64) / 2.);
+            ctx.line_to(x2, y1 + y3 / 2.);
         });
         self.arc_path(x2 - x3, y1, x2, y1 + y3, 0., PI * -0.5, false, true);
         self.line_exec(true, |ctx| {
-            ctx.line_to((x1 as f64) + (x3 as f64) / 2., y1.into());
+            ctx.line_to(x1 + x3 / 2., y1);
         });
 
         self.draw();
     }
 
     fn draw_sized_bitmap(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, filename: &str) {
+        let x1 = self.scaled(x1);
+        let y1 = self.scaled(y1);
+        let x2 = self.scaled(x2);
+        let y2 = self.scaled(y2);
+
         let pixbuf = gdk_pixbuf::Pixbuf::from_file_at_size(
             filename,
-            x1.abs_diff(x2).into(),
-            y1.abs_diff(y2).into(),
+            (x1 - x2).abs() as i32,
+            (y1 - y2).abs() as i32,
         )
         .unwrap();
         let surface = pixbuf
@@ -377,28 +440,29 @@ impl VMSys for VMSysGtk {
                 (-pixbuf.height()).into()
             },
         );
-        cr.set_source_surface(&surface, min(x1, x2).into(), min(y1, y2).into())
-            .ok();
+        cr.set_source_surface(&surface, x1.min(x2), y1.min(y2)).ok();
         cr.paint().ok();
     }
 
     fn draw_text(&mut self, x: u16, y: u16, text: &str) {
+        let x = self.scaled(x);
+        let y = self.scaled(y);
+
         let draw_ctx = self.draw_ctx.borrow();
 
         if let ir::BackgroundTransparency::Opaque = self.background {
             let text_extents = draw_ctx.cr_text.text_extents(text).unwrap();
             let font_extents = draw_ctx.cr_text.font_extents().unwrap();
             draw_ctx.cr_background.rectangle(
-                x.into(),
-                (y as f64) - font_extents.ascent(),
+                x,
+                y - font_extents.ascent(),
                 text_extents.width(),
                 font_extents.height(),
             );
             draw_ctx.cr_background.fill().ok();
         }
 
-        draw_ctx.cr_text.move_to(x.into(), y.into());
-        draw_ctx.cr_text.set_source_rgb(0.0, 0.0, 0.0);
+        draw_ctx.cr_text.move_to(x, y);
         draw_ctx.cr_text.show_text(text).ok();
     }
 
@@ -410,7 +474,7 @@ impl VMSys for VMSysGtk {
         text: &str,
         caption: &str,
     ) -> u16 {
-        let window = gtk::MessageDialog::new(
+        let dialog = gtk::MessageDialog::new(
             Some(&self.window),
             gtk::DialogFlags::DESTROY_WITH_PARENT,
             match icon {
@@ -423,8 +487,8 @@ impl VMSys for VMSysGtk {
             gtk::ButtonsType::None,
             text,
         );
-        window.set_title(caption);
-        window.add_buttons(match typ {
+        dialog.set_title(caption);
+        dialog.add_buttons(match typ {
             ir::MessageBoxType::Ok => &[("Ok", gtk::ResponseType::Other(1))],
             ir::MessageBoxType::OkCancel => &[
                 ("Ok", gtk::ResponseType::Other(1)),
@@ -441,8 +505,8 @@ impl VMSys for VMSysGtk {
             ],
         });
 
-        let response = window.run();
-        window.close();
+        let response = dialog.run();
+        dialog.close();
         while gtk::events_pending() {
             gtk::main_iteration();
         }
@@ -462,7 +526,7 @@ impl VMSys for VMSysGtk {
         todo!()
     }
 
-    fn set_menu(&mut self) {
+    fn set_menu(&mut self, menu: Vec<ir::MenuItem<'a>>) {
         todo!()
     }
 
@@ -495,9 +559,11 @@ impl VMSys for VMSysGtk {
         self.background = option;
 
         let draw_ctx = self.draw_ctx.borrow();
-        draw_ctx
-            .cr_background
-            .set_source_rgb(r.into(), g.into(), b.into())
+        draw_ctx.cr_background.set_source_rgb(
+            (r as f64) / 255.,
+            (g as f64) / 255.,
+            (b as f64) / 255.,
+        )
     }
 
     fn use_brush(&mut self, option: crate::ir::BrushType, r: u16, g: u16, b: u16) {
@@ -511,7 +577,7 @@ impl VMSys for VMSysGtk {
                 ir::BrushType::Solid => {
                     let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, 1, 1).unwrap();
                     let cr = cairo::Context::new(&surface).unwrap();
-                    cr.set_source_rgb(r.into(), g.into(), b.into());
+                    cr.set_source_rgb((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
                     cr.paint().ok();
                     let pattern = cairo::SurfacePattern::create(surface);
                     pattern.set_extend(cairo::Extend::Repeat);
@@ -541,28 +607,14 @@ impl VMSys for VMSysGtk {
     }
 
     fn use_coordinates(&mut self, option: crate::ir::Coordinates) {
-        let draw_ctx = self.draw_ctx.borrow();
-
-        let mm2pix = {
-            let window_gdk = self.window.window().unwrap();
-            let monitor = window_gdk.display().monitor_at_window(&window_gdk).unwrap();
-            (monitor.geometry().width() as f64) / (monitor.width_mm() as f64)
-        };
-
-        draw_ctx.cr_text.identity_matrix();
-        draw_ctx.cr_pen.identity_matrix();
-        draw_ctx.cr_background.identity_matrix();
-        draw_ctx.cr_brush.identity_matrix();
-
-        match option {
-            ir::Coordinates::Pixel => {}
+        self.scale = match option {
+            ir::Coordinates::Pixel => 1.,
             ir::Coordinates::Metric => {
-                draw_ctx.cr_text.scale(mm2pix, mm2pix);
-                draw_ctx.cr_pen.scale(mm2pix, mm2pix);
-                draw_ctx.cr_background.scale(mm2pix, mm2pix);
-                draw_ctx.cr_brush.scale(mm2pix, mm2pix);
+                let window_gdk = self.window.window().unwrap();
+                let monitor = window_gdk.display().monitor_at_window(&window_gdk).unwrap();
+                (monitor.geometry().width() as f64) / (monitor.width_mm() as f64)
             }
-        }
+        };
     }
 
     fn use_font(
@@ -597,15 +649,15 @@ impl VMSys for VMSysGtk {
         draw_ctx.cr_text.set_font_face(&font_face);
         draw_ctx
             .cr_text
-            .set_source_rgb(r.into(), g.into(), b.into());
+            .set_source_rgb((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
 
         let extents = draw_ctx.cr_text.font_extents().unwrap();
         let mut matrix = cairo::Matrix::identity();
         if width != 0 {
-            matrix.set_xx((width as f64) / extents.max_x_advance());
+            matrix.set_xx(self.scaled(width) / extents.max_x_advance());
         }
         if height != 0 {
-            matrix.set_yy((height as f64) / extents.height());
+            matrix.set_yy(self.scaled(height) / extents.height());
         }
         draw_ctx.cr_text.set_font_matrix(matrix);
     }
@@ -628,7 +680,9 @@ impl VMSys for VMSysGtk {
         );
         draw_ctx.cr_pen.set_line_width(width.into());
         draw_ctx.cr_background.set_line_width(width.into());
-        draw_ctx.cr_pen.set_source_rgb(r.into(), g.into(), b.into());
+        draw_ctx
+            .cr_pen
+            .set_source_rgb((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
     }
 
     fn wait_input(&mut self, milliseconds: Option<u16>) {

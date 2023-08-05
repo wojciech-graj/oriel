@@ -106,6 +106,21 @@ pub struct SetKeyboardParam<'a> {
     pub label: Identifier<'a>,
 }
 
+#[derive(Debug, Clone)]
+pub struct MenuItem<'a> {
+    name: &'a str,
+    submenu: Vec<SubMenuItem<'a>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SubMenuItem<'a> {
+    Item {
+        name: &'a str,
+        label: Option<Identifier<'a>>,
+    },
+    Separator,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct SetMouseParam<'a> {
     pub x1: Integer<'a>,
@@ -241,7 +256,7 @@ pub enum Command<'a> {
         i2: Integer<'a>,
     },
     SetKeyboard(Vec<SetKeyboardParam<'a>>),
-    SetMenu(), // TODO
+    SetMenu(Vec<MenuItem<'a>>),
     SetMouse(Vec<SetMouseParam<'a>>),
     SetWaitMode(WaitMode),
     SetWindow(SetWindowOption),

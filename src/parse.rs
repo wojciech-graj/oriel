@@ -317,7 +317,7 @@ impl<'a> Command<'a> {
                 }
                 Command::SetKeyboard(params)
             }
-            "setmenu" => Command::SetMenu(),
+            "setmenu" => Command::SetMenu(Vec::new()),
             "setmouse" => {
                 let mut params: Vec<SetMouseParam> = Vec::new();
                 while kwords.peek().is_some() {
@@ -424,12 +424,20 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
                     }
                     Rule::command_set => {
                         let mut kwords = command_part.into_inner();
-                        prog.commands.push(Command::Set {
-                            var: Identifier(next_pair_unchecked!(kwords).as_str()),
-                            i1: next_pair_unchecked!(kwords).try_into()?,
-                            op: next_pair_unchecked!(kwords).try_into()?,
-                            i2: next_pair_unchecked!(kwords).try_into()?,
-                        });
+                        let var = Identifier(next_pair_unchecked!(kwords).as_str());
+                        let i1 = next_pair_unchecked!(kwords).try_into()?;
+                        // TODO
+                        let (op, i2) = {
+                            if kwords.peek().is_none() {
+                                (MathOperator::Add, Integer::Literal(0))
+                            } else {
+                                (
+                                    next_pair_unchecked!(kwords).try_into()?,
+                                    next_pair_unchecked!(kwords).try_into()?,
+                                )
+                            }
+                        };
+                        prog.commands.push(Command::Set { var, i1, op, i2 });
                     }
                     Rule::label => {
                         let label = next_pair_unchecked!(command_part.into_inner());

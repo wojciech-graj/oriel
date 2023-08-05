@@ -28,7 +28,7 @@ impl MathOperator {
     }
 }
 
-pub trait VMSys {
+pub trait VMSys<'a> {
     fn beep(&mut self);
     fn draw_arc(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16);
     fn draw_background(&mut self);
@@ -63,14 +63,14 @@ pub trait VMSys {
     ) -> u16;
     fn run(&mut self, command: &str);
     fn set_keyboard(&mut self); // TODO
-    fn set_menu(&mut self); // TODO
+    fn set_menu(&mut self, menu: Vec<MenuItem<'a>>);
     fn set_mouse(&mut self); // TODO
     fn set_wait_mode(&mut self, mode: WaitMode);
     fn set_window(&mut self, option: SetWindowOption);
     fn use_background(&mut self, option: BackgroundTransparency, r: u16, g: u16, b: u16);
     fn use_brush(&mut self, option: BrushType, r: u16, g: u16, b: u16);
     fn use_caption(&mut self, text: &str);
-    fn use_coordinates(&mut self, option: Coordinates); // TODO: maybe?
+    fn use_coordinates(&mut self, option: Coordinates);
     fn use_font(
         &mut self,
         name: &str,
@@ -103,7 +103,7 @@ pub struct VM<'a> {
     ip: usize,
     vars: HashMap<Identifier<'a>, u16>,
     call_stack: Vec<usize>,
-    ctx: &'a mut dyn VMSys,
+    ctx: &'a mut dyn VMSys<'a>,
 }
 
 macro_rules! integer_value {
@@ -125,7 +125,7 @@ macro_rules! incr_ip {
 }
 
 impl<'a> VM<'a> {
-    pub fn new(program: &'a Program<'a>, ctx: &'a mut dyn VMSys) -> Self {
+    pub fn new(program: &'a Program<'a>, ctx: &'a mut dyn VMSys<'a>) -> Self {
         VM {
             program,
             ip: 0,
@@ -357,7 +357,7 @@ impl<'a> VM<'a> {
                 )
             ),
             Command::SetKeyboard(_) => {} //TODO
-            Command::SetMenu() => {}      //TODO
+            Command::SetMenu(_) => {}     //TODO
             Command::SetMouse(_) => {}    //TODO
             Command::SetWaitMode(mode) => incr_ip!(self, self.ctx.set_wait_mode(mode)),
             Command::SetWindow(option) => incr_ip!(self, self.ctx.set_window(option)),
