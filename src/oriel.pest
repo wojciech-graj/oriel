@@ -61,10 +61,10 @@ kword_command_nfunc = {
 }
 
 token = {
-    "OK"
-  | "OKCANCEL"
-  | "YESNO"
+    "OKCANCEL"
+  | "OK"
   | "YESNOCANCEL"
+  | "YESNO"
   | "INFORMATION"
   | "EXCLAMATION"
   | "QUESTION"
@@ -93,10 +93,10 @@ token = {
   | "NOITALIC"
   | "UNDERLINE"
   | "NOUNDERLINE"
+  | "DASHDOTDOT"
+  | "DASHDOT"
   | "DASH"
   | "DOT"
-  | "DASHDOT"
-  | "DASHDOTDOT"
 }
 
 kword_token = {

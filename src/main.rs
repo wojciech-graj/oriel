@@ -2,6 +2,7 @@ use std::{env, fs::read_to_string};
 
 mod ir;
 mod parse;
+mod sys_gtk;
 mod vm;
 
 fn main() {
@@ -23,5 +24,8 @@ fn main() {
         Err(e) => panic!("{}", e),
     };
 
-    println!("{:?}\n{:?}", prog.commands, prog.labels);
+    let mut sys = sys_gtk::VMSysGtk::new();
+
+    let mut vm = vm::VM::new(&prog, &mut sys);
+    vm.run();
 }

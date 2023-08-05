@@ -10,36 +10,12 @@ pub enum LogicalOperator {
     NEqual,
 }
 
-impl LogicalOperator {
-    pub fn cmp(&self, i1: u16, i2: u16) -> bool {
-        match self {
-            LogicalOperator::Equal => i1 == i2,
-            LogicalOperator::Less => i1 < i2,
-            LogicalOperator::Greater => i1 > i2,
-            LogicalOperator::LEqual => i1 <= i2,
-            LogicalOperator::GEqual => i1 >= i2,
-            LogicalOperator::NEqual => i1 != i2,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum MathOperator {
     Add,
     Subtract,
     Multiply,
     Divide,
-}
-
-impl MathOperator {
-    pub fn eval(&self, i1: u16, i2: u16) -> Option<u16> {
-        (match self {
-            MathOperator::Add => u16::checked_add,
-            MathOperator::Subtract => u16::checked_sub,
-            MathOperator::Multiply => u16::checked_mul,
-            MathOperator::Divide => u16::checked_div,
-        })(i1, i2)
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -67,13 +43,13 @@ pub enum SetWindowOption {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum UseBackgroundOption {
+pub enum BackgroundTransparency {
     Opaque,
     Transparent,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum UseBrushOption {
+pub enum BrushType {
     Solid,
     DiagonalUp,
     DiagonalDown,
@@ -85,7 +61,7 @@ pub enum UseBrushOption {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum UseCoordinatesOption {
+pub enum Coordinates {
     Pixel,
     Metric,
 }
@@ -97,7 +73,7 @@ pub enum WaitMode {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum UsePenOption {
+pub enum PenType {
     Solid,
     Null,
     Dash,
@@ -107,19 +83,19 @@ pub enum UsePenOption {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum UseFontBold {
+pub enum FontWeight {
     Bold,
     NoBold,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum UseFontItalic {
+pub enum FontSlant {
     Italic,
     NoItalic,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum UseFontUnderline {
+pub enum FontUnderline {
     Underline,
     NoUnderline,
 }
@@ -270,32 +246,32 @@ pub enum Command<'a> {
     SetWaitMode(WaitMode),
     SetWindow(SetWindowOption),
     UseBackground {
-        option: UseBackgroundOption,
+        option: BackgroundTransparency,
         r: Integer<'a>,
         g: Integer<'a>,
         b: Integer<'a>,
     },
     UseBrush {
-        option: UseBrushOption,
+        option: BrushType,
         r: Integer<'a>,
         g: Integer<'a>,
         b: Integer<'a>,
     },
     UseCaption(&'a str),
-    UseCoordinates(UseCoordinatesOption),
+    UseCoordinates(Coordinates),
     UseFont {
         name: &'a str,
         width: Integer<'a>,
         height: Integer<'a>,
-        bold: UseFontBold,
-        italic: UseFontItalic,
-        underline: UseFontUnderline,
+        bold: FontWeight,
+        italic: FontSlant,
+        underline: FontUnderline,
         r: Integer<'a>,
         g: Integer<'a>,
         b: Integer<'a>,
     },
     UsePen {
-        option: UsePenOption,
+        option: PenType,
         width: Integer<'a>,
         r: Integer<'a>,
         g: Integer<'a>,

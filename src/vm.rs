@@ -4,7 +4,31 @@ use thiserror::Error;
 
 use crate::ir::*;
 
-trait VMCtx {
+impl LogicalOperator {
+    fn cmp(&self, i1: u16, i2: u16) -> bool {
+        match self {
+            LogicalOperator::Equal => i1 == i2,
+            LogicalOperator::Less => i1 < i2,
+            LogicalOperator::Greater => i1 > i2,
+            LogicalOperator::LEqual => i1 <= i2,
+            LogicalOperator::GEqual => i1 >= i2,
+            LogicalOperator::NEqual => i1 != i2,
+        }
+    }
+}
+
+impl MathOperator {
+    fn eval(&self, i1: u16, i2: u16) -> Option<u16> {
+        (match self {
+            MathOperator::Add => u16::checked_add,
+            MathOperator::Subtract => u16::checked_sub,
+            MathOperator::Multiply => u16::checked_mul,
+            MathOperator::Divide => u16::checked_div,
+        })(i1, i2)
+    }
+}
+
+pub trait VMSys {
     fn beep(&mut self);
     fn draw_arc(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16);
     fn draw_background(&mut self);
@@ -43,29 +67,24 @@ trait VMCtx {
     fn set_mouse(&mut self); // TODO
     fn set_wait_mode(&mut self, mode: WaitMode);
     fn set_window(&mut self, option: SetWindowOption);
-    fn use_background(&mut self, option: UseBackgroundOption, r: u16, g: u16, g: u16);
-    fn use_brush(&mut self, option: UseBrushOption, r: u16, g: u16, b: u16);
+    fn use_background(&mut self, option: BackgroundTransparency, r: u16, g: u16, b: u16);
+    fn use_brush(&mut self, option: BrushType, r: u16, g: u16, b: u16);
     fn use_caption(&mut self, text: &str);
-    fn use_coordinates(&mut self, option: UseCoordinatesOption); // TODO: maybe?
+    fn use_coordinates(&mut self, option: Coordinates); // TODO: maybe?
     fn use_font(
         &mut self,
         name: &str,
         width: u16,
         height: u16,
-        bold: UseFontBold,
-        italic: UseFontItalic,
-        underline: UseFontUnderline,
+        bold: FontWeight,
+        italic: FontSlant,
+        underline: FontUnderline,
         r: u16,
         g: u16,
         b: u16,
     );
-    fn use_pen(&mut self, option: UsePenOption, width: u16, r: u16, g: u16, b: u16);
+    fn use_pen(&mut self, option: PenType, width: u16, r: u16, g: u16, b: u16);
     fn wait_input(&mut self, milliseconds: Option<u16>);
-}
-
-pub enum Status {
-    Ok,
-    End,
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -80,11 +99,11 @@ pub enum Error<'a> {
 }
 
 pub struct VM<'a> {
-    program: Program<'a>,
+    program: &'a Program<'a>,
     ip: usize,
     vars: HashMap<Identifier<'a>, u16>,
     call_stack: Vec<usize>,
-    ctx: &'a mut dyn VMCtx,
+    ctx: &'a mut dyn VMSys,
 }
 
 macro_rules! integer_value {
@@ -106,7 +125,7 @@ macro_rules! incr_ip {
 }
 
 impl<'a> VM<'a> {
-    fn new(program: Program<'a>, ctx: &'a mut dyn VMCtx) -> Self {
+    pub fn new(program: &'a Program<'a>, ctx: &'a mut dyn VMSys) -> Self {
         VM {
             program,
             ip: 0,
@@ -127,8 +146,9 @@ impl<'a> VM<'a> {
         self.vars.insert(ident, val);
     }
 
-    fn step(&mut self) -> Result<Status, Error> {
-        match self.program.commands[self.ip] {
+    pub fn step(&mut self) -> Result<bool, Error<'a>> {
+        let cmd = &self.program.commands[self.ip];
+        match *cmd {
             Command::Beep => incr_ip!(self, self.ctx.beep()),
             Command::DrawArc {
                 x1,
@@ -286,7 +306,7 @@ impl<'a> VM<'a> {
                 self.ctx
                     .draw_text(integer_value!(self, x), integer_value!(self, y), text)
             ),
-            Command::End => return Ok(Status::End),
+            Command::End => return Ok(false),
             Command::Gosub(ref ident) => {
                 self.call_stack.push(self.ip + 1);
                 self.ip = *(self.program.labels.get(ident).unwrap());
@@ -336,9 +356,9 @@ impl<'a> VM<'a> {
                         .ok_or_else(|| Error::MathOperationError)?,
                 )
             ),
-            Command::SetKeyboard(_) => return Ok(Status::Ok), //TODO
-            Command::SetMenu() => return Ok(Status::Ok),      //TODO
-            Command::SetMouse(_) => return Ok(Status::Ok),    //TODO
+            Command::SetKeyboard(_) => {} //TODO
+            Command::SetMenu() => {}      //TODO
+            Command::SetMouse(_) => {}    //TODO
             Command::SetWaitMode(mode) => incr_ip!(self, self.ctx.set_wait_mode(mode)),
             Command::SetWindow(option) => incr_ip!(self, self.ctx.set_window(option)),
             Command::UseBackground { option, r, g, b } => incr_ip!(
@@ -412,6 +432,17 @@ impl<'a> VM<'a> {
                 })
             ),
         };
-        Ok(Status::Ok)
+        Ok(true)
+    }
+
+    pub fn run(&'a mut self) -> Result<(), Error<'a>> {
+        loop {
+            let step_result = self.step()?;
+
+            if !step_result {
+                break;
+            }
+        }
+        Ok(())
     }
 }

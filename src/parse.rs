@@ -8,7 +8,7 @@ use pest_derive::Parser;
 
 use thiserror::Error;
 
-pub use crate::ir::*;
+use crate::ir::*;
 
 #[derive(Parser)]
 #[grammar = "oriel.pest"]
@@ -94,13 +94,13 @@ enum_impl_from_str!(
 );
 
 enum_impl_from_str!(
-    UseBackgroundOption,
+    BackgroundTransparency,
     (Opaque, "OPAQUE"),
     (Transparent, "TRANSPARENT")
 );
 
 enum_impl_from_str!(
-    UseBrushOption,
+    BrushType,
     (Solid, "SOLID"),
     (DiagonalUp, "DIAGONALUP"),
     (DiagonalDown, "DIAGONALDOWN"),
@@ -111,12 +111,12 @@ enum_impl_from_str!(
     (Null, "NULL")
 );
 
-enum_impl_from_str!(UseCoordinatesOption, (Pixel, "PIXEL"), (Metric, "METRIC"));
+enum_impl_from_str!(Coordinates, (Pixel, "PIXEL"), (Metric, "METRIC"));
 
 enum_impl_from_str!(WaitMode, (Null, "NULL"), (Focus, "FOCUS"));
 
 enum_impl_from_str!(
-    UsePenOption,
+    PenType,
     (Solid, "SOLID"),
     (Null, "NULL"),
     (Dash, "DASH"),
@@ -125,12 +125,12 @@ enum_impl_from_str!(
     (DashDotDot, "DASHDOTDOT")
 );
 
-enum_impl_from_str!(UseFontBold, (Bold, "BOLD"), (NoBold, "NOBOLD"));
+enum_impl_from_str!(FontWeight, (Bold, "BOLD"), (NoBold, "NOBOLD"));
 
-enum_impl_from_str!(UseFontItalic, (Italic, "ITALIC"), (NoItalic, "NOITALIC"));
+enum_impl_from_str!(FontSlant, (Italic, "ITALIC"), (NoItalic, "NOITALIC"));
 
 enum_impl_from_str!(
-    UseFontUnderline,
+    FontUnderline,
     (Underline, "UNDERLINE"),
     (NoUnderline, "NOUNDERLINE")
 );
@@ -404,12 +404,12 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
                         .push(Command::try_from_func(&mut command_part.into_inner())?),
                     Rule::command_goto => {
                         prog.commands.push(Command::Goto(Identifier(
-                            next_pair_unchecked!(command_part.into_inner().skip(1)).as_str(),
+                            next_pair_unchecked!(command_part.into_inner()).as_str(),
                         )));
                     }
                     Rule::command_gosub => {
                         prog.commands.push(Command::Gosub(Identifier(
-                            next_pair_unchecked!(command_part.into_inner().skip(1)).as_str(),
+                            next_pair_unchecked!(command_part.into_inner()).as_str(),
                         )));
                     }
                     Rule::command_if_then => {
