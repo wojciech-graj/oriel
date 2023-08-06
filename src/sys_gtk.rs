@@ -1,10 +1,11 @@
+use std::cell::Ref;
 use std::cell::RefCell;
 use std::f64::consts::PI;
+use std::f64::consts::TAU;
 use std::process;
 use std::rc::Rc;
 use std::time;
 
-use gtk;
 use gtk::cairo;
 use gtk::gdk::prelude::*;
 use gtk::gdk_pixbuf;
@@ -13,12 +14,32 @@ use gtk::prelude::*;
 use crate::ir;
 use crate::vm::*;
 
+macro_rules! cairo_context_getter_opt_set {
+    ($var: ident, $member: ident, $cr: expr) => {
+        fn $var(&self) -> Ref<cairo::Context> {
+            {
+                let borrowed = self.$member.borrow();
+                if let Some(_) = *borrowed {
+                    return Ref::map(borrowed, |cr| cr.as_ref().unwrap());
+                }
+            }
+            {
+                let mut borrowed = self.$member.borrow_mut();
+                *borrowed = Some(cairo::Context::new(&self.surface).unwrap());
+            }
+            let borrowed = self.$member.borrow();
+            $cr(self, borrowed.as_ref().unwrap());
+            Ref::map(borrowed, |cr| cr.as_ref().unwrap())
+        }
+    };
+}
+
 struct DrawCtx {
     surface: cairo::ImageSurface,
-    cr_text_: Option<cairo::Context>,
-    cr_pen_: Option<cairo::Context>,
-    cr_background_: Option<cairo::Context>,
-    cr_brush_: Option<cairo::Context>,
+    cr_text_: RefCell<Option<cairo::Context>>,
+    cr_pen_: RefCell<Option<cairo::Context>>,
+    cr_background_: RefCell<Option<cairo::Context>>,
+    cr_brush_: RefCell<Option<cairo::Context>>,
 
     text_face: cairo::FontFace,
     text_matrix: cairo::Matrix,
@@ -42,10 +63,10 @@ impl DrawCtx {
     fn new() -> Self {
         DrawCtx {
             surface: cairo::ImageSurface::create(cairo::Format::ARgb32, 1, 1).unwrap(),
-            cr_text_: None,
-            cr_pen_: None,
-            cr_background_: None,
-            cr_brush_: None,
+            cr_text_: RefCell::new(None),
+            cr_pen_: RefCell::new(None),
+            cr_background_: RefCell::new(None),
+            cr_brush_: RefCell::new(None),
 
             text_face: {
                 let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, 0, 0).unwrap();
@@ -70,110 +91,91 @@ impl DrawCtx {
         }
     }
 
-    fn cr_text(&mut self) -> &cairo::Context {
-        match self.cr_text_ {
-            Some(ref cr_text) => cr_text,
-            None => {
-                let cr = cairo::Context::new(&self.surface).unwrap();
-                let (r, g, b) = self.text_rgb;
-                cr.set_source_rgb(r, g, b);
-                cr.set_font_matrix(self.text_matrix);
-                self.cr_text_ = Some(cr);
-                self.cr_text_.as_ref().unwrap()
-            }
+    cairo_context_getter_opt_set!(
+        cr_text,
+        cr_text_,
+        |draw_ctx: &DrawCtx, cr: &cairo::Context| {
+            let (r, g, b) = draw_ctx.text_rgb;
+            cr.set_source_rgb(r, g, b);
+            cr.set_font_matrix(draw_ctx.text_matrix);
         }
-    }
+    );
 
-    fn cr_pen(&mut self) -> &cairo::Context {
-        match self.cr_pen_ {
-            Some(ref cr_pen) => cr_pen,
-            None => {
-                let cr = cairo::Context::new(&self.surface).unwrap();
-                let (r, g, b) = self.pen_rgb;
-                cr.set_dash(
-                    match self.pen_type {
-                        ir::PenType::Solid => &[],
-                        ir::PenType::Null => &[0.],
-                        ir::PenType::Dash => &[24., 8.],
-                        ir::PenType::Dot => &[4.],
-                        ir::PenType::DashDot => &[12., 6., 3., 6.],
-                        ir::PenType::DashDotDot => &[12., 3., 3., 3., 3., 3.],
-                    },
-                    0.,
-                );
-                cr.set_line_width(self.pen_width);
-                cr.set_source_rgb(r, g, b);
-                self.cr_pen_ = Some(cr);
-                self.cr_pen_.as_ref().unwrap()
-            }
+    cairo_context_getter_opt_set!(
+        cr_pen,
+        cr_pen_,
+        |draw_ctx: &DrawCtx, cr: &cairo::Context| {
+            let (r, g, b) = draw_ctx.pen_rgb;
+            cr.set_dash(
+                match draw_ctx.pen_type {
+                    ir::PenType::Solid => &[],
+                    ir::PenType::Null => &[0.],
+                    ir::PenType::Dash => &[24., 8.],
+                    ir::PenType::Dot => &[4.],
+                    ir::PenType::DashDot => &[12., 6., 3., 6.],
+                    ir::PenType::DashDotDot => &[12., 3., 3., 3., 3., 3.],
+                },
+                0.,
+            );
+            cr.set_line_width(draw_ctx.pen_width);
+            cr.set_source_rgb(r, g, b);
         }
-    }
+    );
 
-    fn cr_background(&mut self) -> &cairo::Context {
-        match self.cr_background_ {
-            Some(ref cr_background) => cr_background,
-            None => {
-                let cr = cairo::Context::new(&self.surface).unwrap();
-                let (r, g, b) = self.background_rgb;
-                cr.set_line_width(self.pen_width);
-                cr.set_source_rgb(r, g, b);
-                self.cr_background_ = Some(cr);
-                self.cr_background_.as_ref().unwrap()
-            }
+    cairo_context_getter_opt_set!(
+        cr_background,
+        cr_background_,
+        |draw_ctx: &DrawCtx, cr: &cairo::Context| {
+            let (r, g, b) = draw_ctx.background_rgb;
+            cr.set_line_width(draw_ctx.pen_width);
+            cr.set_source_rgb(r, g, b);
         }
-    }
+    );
 
-    fn cr_brush(&mut self) -> &cairo::Context {
-        match self.cr_brush_ {
-            Some(ref cr_brush) => cr_brush,
-            None => {
-                let cr = cairo::Context::new(&self.surface).unwrap();
-                let (r, g, b) = self.brush_rgb;
-                let pattern = cairo::SurfacePattern::create(match self.brush_typ {
-                    ir::BrushType::Solid => {
-                        let surface =
-                            cairo::ImageSurface::create(cairo::Format::Rgb24, 1, 1).unwrap();
-                        let cr = cairo::Context::new(&surface).unwrap();
-                        cr.set_source_rgb(r, g, b);
-                        cr.paint().ok();
-                        surface
-                    }
-                    ir::BrushType::DiagonalUp => {
-                        let surface =
-                            cairo::ImageSurface::create(cairo::Format::Rgb24, 8, 8).unwrap();
-                        let cr = cairo::Context::new(&surface).unwrap();
-                        let (bkg_r, bkg_g, bkg_b) = self.background_rgb;
-                        cr.set_antialias(cairo::Antialias::None);
-                        cr.set_source_rgb(bkg_r, bkg_g, bkg_b);
-                        cr.paint().ok();
-                        cr.set_source_rgb(r, g, b);
-                        cr.move_to(0.5, 8.);
-                        cr.line_to(8., 0.5);
-                        cr.rectangle(0., 0., 0.5, 0.5);
-                        cr.stroke().ok();
-                        surface
-                    }
-                    ir::BrushType::DiagonalDown => todo!(),
-                    ir::BrushType::DiagonalCross => todo!(),
-                    ir::BrushType::Horizontal => todo!(),
-                    ir::BrushType::Vertical => todo!(),
-                    ir::BrushType::Cross => todo!(),
-                    ir::BrushType::Null => {
-                        let surface =
-                            cairo::ImageSurface::create(cairo::Format::ARgb32, 1, 1).unwrap();
-                        let cr = cairo::Context::new(&surface).unwrap();
-                        cr.set_source_rgba(0., 0., 0., 0.);
-                        cr.paint().ok();
-                        surface
-                    }
-                });
-                pattern.set_extend(cairo::Extend::Repeat);
-                cr.set_source(pattern).ok();
-                self.cr_brush_ = Some(cr);
-                self.cr_brush_.as_ref().unwrap()
-            }
+    cairo_context_getter_opt_set!(
+        cr_brush,
+        cr_brush_,
+        |draw_ctx: &DrawCtx, cr: &cairo::Context| {
+            let (r, g, b) = draw_ctx.brush_rgb;
+            let pattern = cairo::SurfacePattern::create(match draw_ctx.brush_typ {
+                ir::BrushType::Solid => {
+                    let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, 1, 1).unwrap();
+                    let cr = cairo::Context::new(&surface).unwrap();
+                    cr.set_source_rgb(r, g, b);
+                    cr.paint().ok();
+                    surface
+                }
+                ir::BrushType::DiagonalUp => {
+                    let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, 8, 8).unwrap();
+                    let cr = cairo::Context::new(&surface).unwrap();
+                    let (bkg_r, bkg_g, bkg_b) = draw_ctx.background_rgb;
+                    cr.set_antialias(cairo::Antialias::None);
+                    cr.set_source_rgb(bkg_r, bkg_g, bkg_b);
+                    cr.paint().ok();
+                    cr.set_source_rgb(r, g, b);
+                    cr.move_to(0.5, 8.);
+                    cr.line_to(8., 0.5);
+                    cr.rectangle(0., 0., 0.5, 0.5);
+                    cr.stroke().ok();
+                    surface
+                }
+                ir::BrushType::DiagonalDown => todo!(),
+                ir::BrushType::DiagonalCross => todo!(),
+                ir::BrushType::Horizontal => todo!(),
+                ir::BrushType::Vertical => todo!(),
+                ir::BrushType::Cross => todo!(),
+                ir::BrushType::Null => {
+                    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, 1, 1).unwrap();
+                    let cr = cairo::Context::new(&surface).unwrap();
+                    cr.set_source_rgba(0., 0., 0., 0.);
+                    cr.paint().ok();
+                    surface
+                }
+            });
+            pattern.set_extend(cairo::Extend::Repeat);
+            cr.set_source(pattern).ok();
         }
-    }
+    );
 
     fn resize(&mut self, width: i32, height: i32) {
         self.surface = {
@@ -183,17 +185,17 @@ impl DrawCtx {
             cr.paint().ok();
             new
         };
-        self.cr_text_ = None;
-        self.cr_pen_ = None;
-        self.cr_background_ = None;
-        self.cr_brush_ = None;
+        *self.cr_text_.borrow_mut() = None;
+        *self.cr_pen_.borrow_mut() = None;
+        *self.cr_background_.borrow_mut() = None;
+        *self.cr_brush_.borrow_mut() = None;
     }
 
     fn scaled(&self, x: u16) -> f64 {
         (x as f64) * self.scale
     }
 
-    fn line_exec(&mut self, brush: bool, op: impl Fn(&cairo::Context)) {
+    fn line_exec(&self, brush: bool, op: impl Fn(Ref<cairo::Context>)) {
         if brush {
             match self.brush_typ {
                 ir::BrushType::Solid
@@ -227,7 +229,7 @@ impl DrawCtx {
     }
 
     fn arc_path(
-        &mut self,
+        &self,
         x1: f64,
         y1: f64,
         x2: f64,
@@ -241,8 +243,8 @@ impl DrawCtx {
 
         let sclx = (x2 - x1) / 2.;
         let scly = (y2 - y1) / 2.;
-        let cx = ((x2 + x1) as f64) / 2.;
-        let cy = ((y2 + y1) as f64) / 2.;
+        let cx = (x2 + x1) / 2.;
+        let cy = (y2 + y1) / 2.;
 
         let startx = cx + sclx * theta1.cos();
         let starty = cy + scly * theta1.sin();
@@ -376,7 +378,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
     }
 
     fn draw_arc(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16) {
-        let mut draw_ctx = self.draw_ctx.borrow_mut();
+        let draw_ctx = self.draw_ctx.borrow();
 
         let x1 = draw_ctx.scaled(x1);
         let y1 = draw_ctx.scaled(y1);
@@ -399,7 +401,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
     }
 
     fn draw_background(&mut self) {
-        let mut draw_ctx = self.draw_ctx.borrow_mut();
+        let draw_ctx = self.draw_ctx.borrow();
 
         draw_ctx.cr_background().paint().ok();
     }
@@ -462,7 +464,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
         let x2 = draw_ctx.scaled(x2);
         let y2 = draw_ctx.scaled(y2);
 
-        draw_ctx.arc_path(x1, y1, x2, y2, 6.28, 0.0, true, true);
+        draw_ctx.arc_path(x1, y1, x2, y2, TAU, 0.0, true, true);
         draw_ctx.draw();
     }
 
@@ -471,7 +473,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
     }
 
     fn draw_line(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) {
-        let mut draw_ctx = self.draw_ctx.borrow_mut();
+        let draw_ctx = self.draw_ctx.borrow();
         let x1 = draw_ctx.scaled(x1);
         let y1 = draw_ctx.scaled(y1);
         let x2 = draw_ctx.scaled(x2);
@@ -600,7 +602,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
     }
 
     fn draw_text(&mut self, x: u16, y: u16, text: &str) {
-        let mut draw_ctx = self.draw_ctx.borrow_mut();
+        let draw_ctx = self.draw_ctx.borrow();
         let x = draw_ctx.scaled(x);
         let y = draw_ctx.scaled(y);
 
@@ -715,15 +717,15 @@ impl<'a> VMSys<'a> for VMSysGtk {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
         draw_ctx.background_transparency = option;
         draw_ctx.background_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
-        draw_ctx.cr_background_ = None;
-        draw_ctx.cr_brush_ = None;
+        *draw_ctx.cr_background_.borrow_mut() = None;
+        *draw_ctx.cr_brush_.borrow_mut() = None;
     }
 
     fn use_brush(&mut self, option: crate::ir::BrushType, r: u16, g: u16, b: u16) {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
         draw_ctx.brush_typ = option;
         draw_ctx.brush_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
-        draw_ctx.cr_brush_ = None;
+        *draw_ctx.cr_brush_.borrow_mut() = None;
     }
 
     fn use_caption(&mut self, text: &str) {
@@ -776,7 +778,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
         draw_ctx.text_face = font_face;
         draw_ctx.text_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
         draw_ctx.text_matrix = matrix;
-        draw_ctx.cr_text_ = None;
+        *draw_ctx.cr_text_.borrow_mut() = None;
 
         if width == 0 && height == 0 {
             return;
@@ -790,7 +792,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
             matrix.set_yy(draw_ctx.scaled(height) / extents.height());
         }
         draw_ctx.text_matrix = matrix;
-        draw_ctx.cr_text_ = None;
+        *draw_ctx.cr_text_.borrow_mut() = None;
     }
 
     fn use_pen(&mut self, option: crate::ir::PenType, width: u16, r: u16, g: u16, b: u16) {
@@ -799,8 +801,8 @@ impl<'a> VMSys<'a> for VMSysGtk {
         draw_ctx.pen_type = option;
         draw_ctx.pen_width = width.into();
         draw_ctx.pen_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
-        draw_ctx.cr_pen_ = None;
-        draw_ctx.cr_background_ = None;
+        *draw_ctx.cr_pen_.borrow_mut() = None;
+        *draw_ctx.cr_background_.borrow_mut() = None;
     }
 
     fn wait_input(&mut self, milliseconds: Option<u16>) {
