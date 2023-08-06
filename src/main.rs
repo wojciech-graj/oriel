@@ -24,7 +24,7 @@ fn main() {
         Err(e) => panic!("{}", e),
     };
 
-    let mut sys = sys_gtk::VMSysGtk::new();
+    let mut sys = sys_gtk::VMSysGtk::new(&args[1]);
 
     let mut vm = vm::VM::new(&prog, &mut sys);
     vm.run();
