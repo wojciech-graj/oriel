@@ -14,6 +14,8 @@ use gtk::prelude::*;
 use crate::ir;
 use crate::vm::*;
 
+//TODO: aliasing?
+
 macro_rules! cairo_context_getter_and_invalidator {
     ($var: ident, $member: ident, $var_inval:ident, $cr: expr) => {
         fn $var(&self) -> Ref<cairo::Context> {
@@ -39,6 +41,44 @@ macro_rules! cairo_context_getter_and_invalidator {
     };
 }
 
+macro_rules! cairo_new_surface_rgb {
+    ($width:expr, $height:expr, $r:expr, $g:expr, $b:expr) => {{
+        let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, $width, $height).unwrap();
+        let cr = cairo::Context::new(&surface).unwrap();
+        cr.set_source_rgb($r, $g, $b);
+        cr.paint().ok();
+        (surface, cr)
+    }};
+}
+
+macro_rules! cairo_pattern_draw_diagonal_up {
+    ($cr:ident) => {{
+        $cr.move_to(0.5, 8.);
+        $cr.line_to(8., 0.5);
+    }};
+}
+
+macro_rules! cairo_pattern_draw_diagonal_down {
+    ($cr:ident) => {{
+        $cr.move_to(0., 0.5);
+        $cr.line_to(7.5, 8.);
+    }};
+}
+
+macro_rules! cairo_pattern_draw_horizontal {
+    ($cr:ident) => {{
+        $cr.move_to(0., 0.);
+        $cr.line_to(8., 0.);
+    }};
+}
+
+macro_rules! cairo_pattern_draw_vertical {
+    ($cr:ident) => {{
+        $cr.move_to(0., 0.);
+        $cr.line_to(0., 8.);
+    }};
+}
+
 struct DrawCtx {
     surface: cairo::ImageSurface,
     cr_text_: RefCell<Option<cairo::Context>>,
@@ -58,7 +98,7 @@ struct DrawCtx {
     background_transparency: ir::BackgroundTransparency,
     background_rgb: (f64, f64, f64),
 
-    brush_typ: ir::BrushType,
+    brush_type: ir::BrushType,
     brush_rgb: (f64, f64, f64),
 
     scale: f64,
@@ -67,7 +107,7 @@ struct DrawCtx {
 impl DrawCtx {
     fn new() -> Self {
         DrawCtx {
-            surface: cairo::ImageSurface::create(cairo::Format::ARgb32, 1, 1).unwrap(),
+            surface: cairo::ImageSurface::create(cairo::Format::ARgb32, 0, 0).unwrap(),
             cr_text_: RefCell::new(None),
             cr_pen_: RefCell::new(None),
             cr_background_: RefCell::new(None),
@@ -89,7 +129,7 @@ impl DrawCtx {
             background_transparency: ir::BackgroundTransparency::Transparent,
             background_rgb: (1., 1., 1.),
 
-            brush_typ: ir::BrushType::Null,
+            brush_type: ir::BrushType::Null,
             brush_rgb: (0., 0., 0.),
 
             scale: 1.,
@@ -146,33 +186,61 @@ impl DrawCtx {
         cr_brush_inval,
         |draw_ctx: &DrawCtx, cr: &cairo::Context| {
             let (r, g, b) = draw_ctx.brush_rgb;
-            let pattern = cairo::SurfacePattern::create(match draw_ctx.brush_typ {
-                ir::BrushType::Solid => {
-                    let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, 1, 1).unwrap();
-                    let cr = cairo::Context::new(&surface).unwrap();
-                    cr.set_source_rgb(r, g, b);
-                    cr.paint().ok();
-                    surface
-                }
+            let (bkg_r, bkg_g, bkg_b) = draw_ctx.background_rgb;
+            let pattern = cairo::SurfacePattern::create(match draw_ctx.brush_type {
+                ir::BrushType::Solid => cairo_new_surface_rgb!(1, 1, r, g, b).0,
                 ir::BrushType::DiagonalUp => {
-                    let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, 8, 8).unwrap();
-                    let cr = cairo::Context::new(&surface).unwrap();
-                    let (bkg_r, bkg_g, bkg_b) = draw_ctx.background_rgb;
+                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
                     cr.set_antialias(cairo::Antialias::None);
-                    cr.set_source_rgb(bkg_r, bkg_g, bkg_b);
-                    cr.paint().ok();
                     cr.set_source_rgb(r, g, b);
-                    cr.move_to(0.5, 8.);
-                    cr.line_to(8., 0.5);
+                    cairo_pattern_draw_diagonal_up!(cr);
                     cr.rectangle(0., 0., 0.5, 0.5);
                     cr.stroke().ok();
                     surface
                 }
-                ir::BrushType::DiagonalDown => todo!(),
-                ir::BrushType::DiagonalCross => todo!(),
-                ir::BrushType::Horizontal => todo!(),
-                ir::BrushType::Vertical => todo!(),
-                ir::BrushType::Cross => todo!(),
+                ir::BrushType::DiagonalDown => {
+                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    cr.set_antialias(cairo::Antialias::None);
+                    cr.set_source_rgb(r, g, b);
+                    cairo_pattern_draw_diagonal_down!(cr);
+                    cr.rectangle(8., 0., 0.5, 0.5);
+                    cr.stroke().ok();
+                    surface
+                }
+                ir::BrushType::DiagonalCross => {
+                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    cr.set_antialias(cairo::Antialias::None);
+                    cr.set_source_rgb(r, g, b);
+                    cairo_pattern_draw_diagonal_up!(cr);
+                    cairo_pattern_draw_diagonal_down!(cr);
+                    cr.stroke().ok();
+                    surface
+                }
+                ir::BrushType::Horizontal => {
+                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    cr.set_antialias(cairo::Antialias::None);
+                    cr.set_source_rgb(r, g, b);
+                    cairo_pattern_draw_horizontal!(cr);
+                    cr.stroke().ok();
+                    surface
+                }
+                ir::BrushType::Vertical => {
+                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    cr.set_antialias(cairo::Antialias::None);
+                    cr.set_source_rgb(r, g, b);
+                    cairo_pattern_draw_vertical!(cr);
+                    cr.stroke().ok();
+                    surface
+                }
+                ir::BrushType::Cross => {
+                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    cr.set_antialias(cairo::Antialias::None);
+                    cr.set_source_rgb(r, g, b);
+                    cairo_pattern_draw_horizontal!(cr);
+                    cairo_pattern_draw_vertical!(cr);
+                    cr.stroke().ok();
+                    surface
+                }
                 ir::BrushType::Null => {
                     let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, 1, 1).unwrap();
                     let cr = cairo::Context::new(&surface).unwrap();
@@ -188,11 +256,16 @@ impl DrawCtx {
 
     fn resize(&mut self, width: i32, height: i32) {
         self.surface = {
-            let new = cairo::ImageSurface::create(cairo::Format::ARgb32, width, height).unwrap();
-            let cr = cairo::Context::new(&new).unwrap();
+            let (surface, cr) = cairo_new_surface_rgb!(
+                width,
+                height,
+                self.background_rgb.0,
+                self.background_rgb.1,
+                self.background_rgb.2
+            );
             cr.set_source_surface(&self.surface, 0., 0.).ok();
             cr.paint().ok();
-            new
+            surface
         };
         *self.cr_text_.borrow_mut() = None;
         *self.cr_pen_.borrow_mut() = None;
@@ -206,7 +279,7 @@ impl DrawCtx {
 
     fn line_exec(&self, brush: bool, op: impl Fn(Ref<cairo::Context>)) {
         if brush {
-            match self.brush_typ {
+            match self.brush_type {
                 ir::BrushType::Solid
                 | ir::BrushType::DiagonalUp
                 | ir::BrushType::DiagonalDown
@@ -732,7 +805,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
 
     fn use_brush(&mut self, option: crate::ir::BrushType, r: u16, g: u16, b: u16) {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
-        draw_ctx.brush_typ = option;
+        draw_ctx.brush_type = option;
         draw_ctx.brush_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
         draw_ctx.cr_brush_inval();
     }
