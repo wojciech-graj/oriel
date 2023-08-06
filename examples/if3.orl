@@ -1,0 +1,31 @@
+{Page 510-511}
+{Initialize variables}
+     Set Color_Red=63
+     Set Color_Green=63
+     Set Color_Blue=63
+     Set Color_X1=5        {Start the matrix at (5,5)}
+     Set Color_Y1=5
+
+Draw_Color:
+     UseBrush(SOLID,Color_Red,Color_Green,Color_Blue)
+     Set Color_X2=Color_X1+8
+     Set Color_Y2=Color_Y1+8
+     DrawRectangle(Color_X1,Color_Y1,Color_X2,Color_Y2)
+
+     Set Color_Red=Color_Red+64
+     If Color_Red<=255 Then Goto Color_Ready
+     Set Color_Red=63
+     Set Color_Green=Color_Green+64
+
+     If Color_Green<=255 Then Goto Color_Ready
+     Set Color_Green=63
+     Set Color_Blue=Color_Blue+64
+Color_Ready:
+
+     Set Color_X1=Color_X1+11
+     If Color_X1<=82 Then Goto Draw_Color
+     Set Color_X1=5
+     Set Color_Y1=Color_Y1+11
+     If Color_Y1<=82 Then Goto Draw_Color
+
+     WaitInput()

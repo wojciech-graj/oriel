@@ -1,0 +1,7 @@
+{Page 490}
+UseBackground(TRANSPARENT,0,255,0)
+DrawBackground
+DrawText(10,10,"The effect of text")
+WaitInput(2000)
+DrawBackground
+WaitInput()

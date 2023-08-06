@@ -1,0 +1,23 @@
+{Page 502}
+{Set up the environment}
+   SetWindow(MAXIMIZE)
+   UseCoordinates(PIXEL)
+   UsePen(SOLID,3,0,0,0)
+   UseBrush(SOLID,255,255,230)
+
+Rect1:
+   SetMouse(0,0,700,600,Rect2,x1,y1)
+   DrawText(10,300,
+     "Click on upper-left corner of the rectangle")
+   Goto Get_Input
+Rect2:
+   SetMouse(0,0,700,600,Rect3,x2,y2)
+   DrawText(10,300,
+     "Click on lower-right corner of the rectangle")
+   Goto Get_Input
+Rect3:
+   DrawRectangle(x1,y1,x2,y2)
+   Goto Rect1
+
+Get_Input:
+   WaitInput()

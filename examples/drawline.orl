@@ -1,0 +1,17 @@
+{Page 496-497}
+UsePen(SOLID,1,0,0,0)
+DrawLine(10,10,40,10)
+
+UsePen(SOLID,2,0,0,0)
+DrawLine(10,15,40,15)
+
+UsePen(SOLID,3,0,0,0)
+DrawLine(10,20,40,20)
+
+UsePen(SOLID,4,0,0,0)
+DrawLine(10,25,40,25)
+
+UsePen(SOLID,5,0,0,0)
+DrawLine(10,30,40,30)
+
+WaitInput()

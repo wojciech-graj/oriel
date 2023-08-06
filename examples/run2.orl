@@ -1,0 +1,6 @@
+{Page 486, 515}
+SetWaitMode(FOCUS)
+Run("NOTEPAD.EXE")
+WaitInput(1)   {Wait until the focus returns}
+RUN("C:\COMMAND.COM")
+WaitInput()

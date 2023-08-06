@@ -1,0 +1,16 @@
+{Page 483}
+{Define the menu template}
+     SetMenu("Write",Run_write,
+             ENDPOPUP,
+	     "Exit",Leave,
+	     ENDPOPUP)
+
+Wait_for_input:
+     WaitInput()
+
+Run_write:
+     Run("WRITE.EXE")
+     Goto Wait_for_input
+
+Leave:
+     End

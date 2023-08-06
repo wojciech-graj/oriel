@@ -1,0 +1,5 @@
+{Page 529}
+SetWaitMode(NULL)
+Run("NOTEPAD.EXE")
+MessageBox(OK,1,INFORMATION,"Comes up in front of Notepad",
+           "Oriel message box",Temp)

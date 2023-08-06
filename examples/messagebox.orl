@@ -1,0 +1,5 @@
+{Page 512}
+MessageBox(YESNO,1,QUESTION,"Change the background to blue?",
+           "Background box",Button)
+If Button=1 Then UseBackground(OPAQUE,0,0,255) | DrawBackground
+WaitInput()

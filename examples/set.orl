@@ -1,0 +1,34 @@
+{Page 516-517}
+{Initialize variables}
+     UseCoordinates(PIXEL)    {Use NULL pen for shading}
+     UsePen(NULL,0,0,0,0)
+     Set Red=0
+     Set Blue=0
+     Set Green=0
+     Set x1=150               {Starting x position}
+     set Final_x1=x1
+     Set y1=160               {Starting y position}
+     Set Final_y1=y1
+     Set Ball_size=90         {Ball size}
+     Set Count=1
+Next_shade:
+     If Count>10 Then Goto Flood
+     Set x2=x1+Ball_size
+     Set y2=y1-Ball_size
+     UseBrush(SOLID,Red,Green,Blue)
+     DrawEllipse(x1,y1,x2,y2)
+     Set x1=x1+2
+     Set y1=y1-2
+     Set Red=Red+25
+     Set Count=Count+1
+     Goto Next_shade
+
+Flood:
+     UsePen(SOLID,2,0,0,0)
+     UseBrush(NULL,0,0,0)
+     Set x2=Final_x1+Ball_size
+     Set y2=Final_y1-Ball_size
+     DrawEllipse(Final_x1,Final_y1,x2,y2)
+     UseBrush(SOLID,255,255,255)     {White brush}
+     DrawFlood(1,1,0,0,0)            {Flood with white}
+     WaitInput()

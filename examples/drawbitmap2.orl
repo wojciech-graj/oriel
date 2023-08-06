@@ -1,0 +1,3 @@
+{Page 491}
+DrawBitmap(0,0,"C:\WINDOWS\CHESS.BMP")
+WaitInput()

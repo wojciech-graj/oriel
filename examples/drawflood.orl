@@ -1,0 +1,28 @@
+{Page 495-496}
+{Set up the mouse, pen, and brush}
+	SetWindow(MAXIMIZE)
+	SetMouse(0,0,700,600,Flood_Mouse,Flood_x,Flood_y)
+	UsePen(SOLID,3,0,0,255) {Use a 3-pixel wide blue pen}
+	UseBrush(NULL,0,0,0)    {Use hollow brush for random shapes}
+
+{Fill the window with random shapes}
+	DrawRectangle(5,10,200,150)
+	DrawRectangle(55,31,82,50)
+	DrawRectangle(105,41,120,140)
+	DrawRectangle(50,50,100,150)
+	DrawRectangle(105,50,120,133)
+	DrawRectangle(5,120,180,125)
+	DrawEl1ipse(30,30,240,140)
+	DrawEl1ipse(10,30,150,100)
+	DrawEllipse(25,10,50,100)
+	DrawEllipse(33,51,123,143)
+	DrawText (5,3,"Click within an area to flood it with red")
+	UseBrush(SOLID,255,0,0)     {Use a red brush for flooding}
+	UseCoordinates(PIXEL)       {More accurate than metric}
+
+Flood_Wait:
+	WaitInput()
+
+Flood_Mouse:
+	DrawFlood(Flood_x,Flood_y,0,0,255)  {Flood till it meets blue}
+	Goto Flood_Wait

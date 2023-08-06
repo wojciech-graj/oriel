@@ -1,0 +1,35 @@
+{Page 485-486}
+{Define the menu template}
+     SetMenu("Write",Run_write,
+             ENDPOPUP,
+	     "Exit",Leave,
+	     ENDPOPUP)
+
+{Draw buttons with text}
+     DrawRectangle(10,10,30,20)
+     DrawText(14,12,"Write")
+     DrawRectangle(10,25,30,35)
+     DrawText(15,27,"Exit")
+
+{Set up the mouse}
+     SetMouse(10,10,30,20,Run_write,x,y,
+              10,25,30,35,Leave,x,y)
+
+{Put up a message regarding keyboard support}
+     DrawText(10,40,"Press W for Write or E to exit")
+
+{Set up the keyboard}
+     SetKeyboard("W",Run_write,
+                 "w",Run_write,
+		 "E",Leave,
+		 "e",Leave)
+
+Wait_for_input:
+     WaitInput()
+
+Run_write:
+     Run("WRITE.EXE")
+     Goto Wait_for_input
+
+Leave:
+     End

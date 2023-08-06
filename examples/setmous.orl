@@ -1,0 +1,25 @@
+{Page 483-484}
+{Define the menu template}
+     SetMenu("Write",Run_write,
+             ENDPOPUP,"Exit",
+	     Leave,
+	     ENDPOPUP)
+
+{Draw buttons with text}
+      DrawRectangle(10,10,30,20)
+      DrawText(14,12,"Write")
+      DrawRectangle(10,25,30,35)
+      DrawText(15,27,"Exit")
+
+{Set up the mouse}
+     SetMouse(10,10,30,20,Run_write,x,y,10,25,30,35,Leave,x,y)
+
+Wait_for_input:
+     WaitInput()
+
+Run_write:
+     Run("WRITE.EXE")
+     Goto Wait_for_input
+
+Leave:
+     End

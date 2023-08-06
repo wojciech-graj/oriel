@@ -1,0 +1,32 @@
+{Page 527-528}
+{Set coordinate system to pixels}
+     UseCoordinates(PIXEL)
+
+{Draw the rectangle that will later become a bit-testing region}
+     DrawRectangle(1,1,300,200)
+     DrawText(30,210,"Click the mouse within the rectangle")
+
+{Draw the Exit button using a grey brush}
+     UseBrush(SOLID,192,192,192)
+     DrawRoundRectangle(340,80,400,120,10,10)
+     UseBackground(TRANSPARENT,0,0,0)
+     DrawText(357,90,"Exit")
+
+{Use a black brush}
+     UseBrush(SOLID,0,0,0)
+
+{Set up the mouse}
+     SetMouse(1,1,300,200,Mouse_hit,Mouse_x,Mouse_y,  {Rectangle}
+          320,80,400,120,Goodbye,Temp,Temp)         {Exit button}
+
+Wait_for_Input:
+     WaitInput()
+
+Mouse_hit:
+     Set x2=Mouse_x+2
+     Set y2=Mouse_y+2
+     DrawRectangle(Mouse_x,Mouse_y,x2,y2)
+     Goto Wait_for_Input
+
+Goodbye:
+     End

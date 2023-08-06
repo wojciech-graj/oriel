@@ -1,0 +1,6 @@
+{Page 543}
+DrawText(10,10,"Oriel will pause for 2 seconds")
+WaitInput(2000)
+DrawText(10,10,
+  "Oriel will now pause indefinitely until you close the window")
+WaitInput()

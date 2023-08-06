@@ -1,0 +1,7 @@
+{Page 505}
+UseCoordinates(PIXEL)
+UseFont("Terminal",10,20,NOBOLD,NOITALIC,NOUNDERLINE,0,0,0)
+DrawText(10,10,"Windows 3 Power Tools")
+UseFont("Terminal",25,40,NOBOLD,NOITALIC,NOUNDERLINE,0,0,0)
+DrawText(10,30,"Windows 3 Power Tools")
+WaitInput()

@@ -1,0 +1,5 @@
+{Page 504}
+UseCoordinates(PIXEL)
+DrawBitmap(10,10,"examples/RIBBONS.BMP")
+DrawSizedBitmap(350,174,514,10,"examples/RIBBONS.BMP")
+WaitInput()

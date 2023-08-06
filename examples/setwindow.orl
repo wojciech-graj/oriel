@@ -1,0 +1,9 @@
+{Page 531}
+SetWindow(MAXIMIZE)
+WaitInput(1000)
+SetWindow(RESTORE)
+WaitInput(1000)
+SetWindow(MINIMIZE)
+WaitInput(1000)
+SetWindow(RESTORE)
+WaitInput()

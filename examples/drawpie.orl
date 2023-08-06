@@ -1,0 +1,5 @@
+{Page 500}
+UseBrush(SOLID,0,255,255)
+UseCoordinates(PIXEL)
+DrawPie(110,30,160,80,160,30,160,80)
+WaitInput()

@@ -1,0 +1,4 @@
+{Page 534}
+UseBrush(CROSS,255,0,0)
+DrawRoundRectangle(10,10,40,40,10,10)
+WaitInput()

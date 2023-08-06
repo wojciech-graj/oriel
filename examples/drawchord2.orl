@@ -1,0 +1,39 @@
+{Page 492-493}
+{Set up the environment}
+   SetWindow(MAXIMIZE)
+   UseCoordinates(PIXEL)
+   UseFont("Terminal",10,10,NOBOLD,NOITALIC,NOUNDERLINE,0,0,0)
+
+Chord1:
+   UsePen(DOT,1,0,0,0)      {Use dotted pen for temporary ellipse}
+   UseBrush(NULL,0,0,0)     {Use hollow brush for temporary ellipse}
+   SetMouse(0,0,700,600,Chord2,x1,y1)
+   DrawText(10,300,
+    "Click on upper-left corner of rectangle bounding chord ")
+   Goto Get_Input
+Chord2:
+   SetMouse(0,0,700,600,Chord3,x2,y2)
+   DrawText(10,300,
+    "Click on lower-right corner of rectangle bounding chord")
+   Goto Get_Input
+Chord3:
+   DrawEllipse(x1,y1,x2,y2) {Draw temporary ellipse}
+   SetMouse(0,0,700,600,Chord4,x3,y3)
+   DrawText(10,300,
+    "Click on one point of line defining chord              ")
+   Goto Get_Input
+Chord4:
+   SetMouse(0,0,700,600,Chord_End,x4,y4)
+   DrawText(10,300,
+    "Click on second point of line defining chord           ")
+   Goto Get_Input
+
+Chord_End:
+   DrawBackground               {Clear the temporary ellipse}
+   UsePen(SOLID,1,0,0,0)        {Use a solid black pen}
+   UseBrush(SOLID,255,0,0)      {Use a solid red brush)
+   DrawChord(x1,y2,x2,y2,x3,y3,x4,y4)
+   Goto Chord1
+
+Get_input:
+   WaitInput()

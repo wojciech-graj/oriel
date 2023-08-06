@@ -1,0 +1,37 @@
+{Page 489}
+{Set up the environment}
+   SetWindow(MAXIMIZE)
+   UseCoordinates(PIXEL)
+   UseFont("Terminal",10,10,NOBOLD,NOITALIC,NOUNDERLINE,0,0,0)
+
+Arc1:
+   UsePen(DOT,1,0,0,0)     {Use a dotted pen for the temporary ellipse}
+   SetMouse(0,0,700,600,Arc2,x1,y1)
+   DrawText(10,300,
+     "Click on the upper-left corner of the rectangle bounding the arc ")
+   Goto Get_Input
+Arc2:
+   SetMouse(0,0,790,600,Arc3,x2,y2)
+   DrawText(10,300,
+     "Click on the lower-right corner of the rectangle bounding the arc")
+   Goto Get_Input
+Arc3:
+   DrawEllipse(x1,y1,x2,y2)         {Draw a temporary ellipse}
+   SetMouse(0,0,700,600,Arc4,x3,y3)
+   DrawText(10,300,
+     "Click on the arc’s starting point                                ")
+   Goto Get_Input
+Arc4:
+   SetMouse(0,0,700,600,Arc_End,x4,y4)
+   DrawText(10,300,
+     "Click on the arc’s ending point ")
+   Goto Get_Input
+
+Arc_End:
+   DrawBackground                   {Clear the temporary ellipse}
+   UsePen(SOLID,1,0,0,0)            {Use a solid black pen}
+   DrawArc(x1,y1,x2,y2,x3,y3,x4,y4)
+   Goto Arc1
+
+Get_Input:
+   WaitInput()

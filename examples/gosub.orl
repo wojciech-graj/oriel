@@ -1,0 +1,19 @@
+{Page 507-508}
+{Initialize counter}
+	Set Count=1
+
+Next:
+	If Count > 10 Then Goto Wait_for_Input
+	Gosub Put_Line
+	Set Count=Count+1
+	Goto Next
+
+Put_Line:
+	UseFont("System",Count,1,NOBOLD,NOITALIC,NOUNDERLINE,0,0,0)
+	Set y=Count*7
+	DrawNumber(0,y,Count)
+	DrawText(20,y,"Windows 3 Power Tools")
+	Return
+
+Wait_for_Input:
+	WaitInput()

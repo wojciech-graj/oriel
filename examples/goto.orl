@@ -1,0 +1,11 @@
+{Page 509}
+{Program to launch Notepad and/or Calculator}
+	MessageBox(YESNO,1,QUESTION,"Run Notepad?",
+	           "Notepad?",Button)
+	If Button=2 Then Goto Run_Calc
+	Run("NOTEPAD.EXE")
+Run_Calc:
+	MessageBox(YESNO,1,QUESTION,"Run Calculator?",
+	           "Calculator?",Button)
+	If Button=1 Then Run("CALC.EXE")
+	End

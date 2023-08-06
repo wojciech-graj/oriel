@@ -1,0 +1,5 @@
+{Page 491}
+UseCoordinates(PIXEL)
+UseBrush(SOLID,0,255,255)
+DrawChord(40,30,210,190,210,30,40,30)
+WaitInput()

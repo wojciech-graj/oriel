@@ -1,0 +1,25 @@
+{Page 498-499}
+{Set up the mouse hit testing area and where to branch on a click}
+     SetMouse(0,0,1000,1000,Draw_Coord,Mouse_x,Mouse_y)
+     DrawText(5,5,"Click the mouse anywhere in the window")
+
+Wait Mouse:
+     WaitInput()
+
+{Draw the x-coordinate}
+Draw_coord:
+     DrawNumber(Mouse_x,Mouse_y,Mouse_x)
+
+{Increase the x-coordinate by 3 millimeters for each digit in Mouse_x}
+     If Mouse_x>=100 Then Set x=Mouse_x+9 | Goto Draw_Conma {3 digits}
+     If Mouse_x>=10  Then Set x=Mouse_x+6 | Goto Draw Comma {2 digits}
+     {Else}               Set x=Mouse_x+3              {1 digit only}
+
+{Draw the comma}
+Draw_Comma:
+     DrawText(x,Mouse_y,",")
+
+{Increase x by 2 and draw the y-coordinate}
+     Set x=x+2
+     DrawNumber(x,Mouse_y.Mouse_y)
+     Goto Wait_Mouse

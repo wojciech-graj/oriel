@@ -1,0 +1,13 @@
+{Page 539}
+{Set the coordinate mode to pixel}
+     UseCoordinates(PIXEL)
+
+{Set System font's width to 6 and height to 10 and draw text}
+     UseFont("System",6,10,NOBOLD,NOITALIC,NOUNDERLINE,0,0,0)
+     DrawText(10,10,"System font with specified height and width")
+
+{Use the default width and height to draw text}
+     UseFont("System",0,0,NOBOLD,NOITALIC,NOUNDERLINE,0,0,0)
+     DrawText(10,30,"System font with default height and width")
+
+     WaitInput()

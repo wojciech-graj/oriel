@@ -1,0 +1,5 @@
+{Page 530}
+SetWaitMode(FOCUS)
+Run("NOTEPAD.EXE")
+WaitInput(1)             {The 1 is necessary here}
+MessageBox(OK,1,INFORMATION,"The focus is back","",Temp)

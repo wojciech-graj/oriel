@@ -1,0 +1,6 @@
+{Page 501}
+UsePen(SOLID,3,0,0,0)
+UseBrush(SOLID,255,128,0)
+UseCoordinates(PIXEL)
+DrawRectangle(10,10,200,100)
+WaitInput()

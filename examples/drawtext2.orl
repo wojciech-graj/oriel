@@ -1,0 +1,9 @@
+{Page 505-506}
+UseCoordinates(PIXEL)
+UseFont("System",10,20,NOBOLD,NOITALIC,NOUNDERLINE,0,0,0)
+DrawText(10,10,"Windows 3 Power Tools")
+UseBackground(OPAQUE,128,128,128) {Light grey background}
+DrawText(10,30,"Windows 3 Power Tools")
+UseFont("System",10,20,NOBOLD,NOITALIC,NOUNDERLINE,255,255,255)
+DrawText(10,50,"Windows 3 Power Tools")
+WaitInput()

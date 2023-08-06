@@ -1,0 +1,33 @@
+{Page 525-526}
+{Set up the menu}
+     SetMenu("&Programs",IGNORE,
+             "&Notepad",Run_Notepad",
+             "&Write",Run_Write,
+             "&Calculator",Run_Calculator,
+             SEPARATOR,
+             "Goto &DOS",DOS,
+             ENDPOPUP,
+             "&Exit!",Shut_Down,
+             ENDPOPUP)
+
+Wait_for_Input:
+     WaitInput()
+
+Run_Notepad:
+     Run("NOTEPAD.EXE")
+     Goto Wait_for_Input
+
+Run_Write:
+     Run("WRITE.EXE")
+     Goto Wait_for_Input
+
+Run_Calculator:
+     Run("CALC.EXE")
+     Goto Wait_for_Input
+
+DOS:
+     Run("C:\COMMAND.COM")
+     Goto Wait_for_Input
+
+Shut_Down:
+     End

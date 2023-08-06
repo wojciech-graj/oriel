@@ -1,0 +1,4 @@
+{Page 498}
+UseCoordinates(PIXEL)
+DrawNumber(20,10,1000)
+WaitInput()

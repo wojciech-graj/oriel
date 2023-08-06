@@ -1,0 +1,5 @@
+{Page 482}
+DrawText(10,10,"Waiting...")
+WaitInput(3000)  {Pause the program for 3 seconds}
+DrawBackground   {Erase the window}
+WaitInput()

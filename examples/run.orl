@@ -1,0 +1,4 @@
+{Page 486,514}
+Run("NOTEPAD.EXE")
+RUN("C:\COMMAND.COM")
+WaitInput()

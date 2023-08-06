@@ -1,0 +1,45 @@
+{Page 518-520}
+{Draw Buttons}
+     UseBrush(SOLID,192,192,192)      {Grey brush}
+     UseBackground(TRANSPARENT,0,0,0) {Prevent white text background}
+     DrawRoundRectangle(10,10,40,25,5,5)
+     UseFont("System",1,3,NOBOLD,NOITALIC,UNDERLINE,0,0,0)
+     DrawText(15,14,"N")
+
+     UseFont("System",1,3,NOBOLD,NOITALIC,NOUNDERLINE,0,0,0)
+     DrawText(18,14,"otepad")
+     DrawRoundRectangle(10,40,40,55,5,5)
+
+     UseFont("System",1,3,NOBOLD,NOITALIC,UNDERLINE,0,0,0)
+     DrawText(12,44,"C")
+
+     UseFont("System",1,3,NOBOLD,NOITALIC,NOUNDERLINE,0,0,0)
+     DrawText(15,44,"alculator")
+
+{Set up the mouse}
+     SetMouse(10,10,40,30,Run_Notepad,Temp,Temp,
+              10,40,40,60,Run_Calc,Temp,Temp)
+
+{Set up the keyboard}
+     SetKeyboard("N",Run_Notepad,
+                 "n",Run_Notepad,
+		 "C",Run_Calc,
+		 "c",Run_Calc,
+		 112,Help_Box)     {122-virtual key for F1}
+
+Wait_for_Input:
+     WaitInput()
+
+Run_Notepad:
+     Run("NOTEPAD.EXE")
+     Goto Wait_for_Input
+
+Run_Calc:
+     Run("CALC.EXE")
+     Goto Wait_for_Input
+
+Help_Box:
+     MessageBox(OK,1,NOICON,
+     "Pick a button to run the Windows application",
+     "Help box",TEMP)
+     Goto Wait_for_Input

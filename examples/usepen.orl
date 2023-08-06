@@ -1,0 +1,21 @@
+{Page 541-542}
+{Solid line in black}
+UsePen(SOLID,1,0,0,0)
+DrawLine(10,10,90,10)
+
+{Dashed line in red}
+UsePen(DASH,1,255,0,0)
+DrawLine(10,20,90,20)
+
+{Dotted line in green}
+UsePen(DOT,1,0,255,0)
+DrawLine(10,30,90,30)
+
+{Dash-dot line in blue}
+UsePen(DASHDOT,1,0,0,255)
+DrawLine(10,40,90,40)
+
+{Dash-dot-dot line in pink}
+UsePen(DASHDOTDOT,1,255,0,255)
+DrawLine(10,50,90,50)
+WaitInput()

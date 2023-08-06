@@ -1,0 +1,4 @@
+{Page 488}
+UseCoordinates(PIXEL)
+DrawArc(30,20,200,180,200,20,30,20)
+WaitInput()

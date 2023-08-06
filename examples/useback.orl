@@ -1,0 +1,29 @@
+{Page 532-533}
+{Change window's background to light grey}
+     UseBackground(TRANSPARENT,192,192,192)
+     DrawBackground
+
+{Change background mode to TRANSPARENT and color to white}
+     UseBackground(TRANSPARENT,255,255,255)
+
+{Draw text, dotted line, and hatched rectangle}
+     DrawFext(10,10,"Text with a TRANSPARENT background")
+     UsePen(DOT,1,0,0,0)      {Dotted pen}
+     DrawLine(10,21,40,21)
+     UsePen(SOLID,1,0,0,0)    {Reset the pen to solid}
+     UseBrush(CROSS,0,0,0)    {Cross hatched brush}
+     DrawRectangle(10,30,40,40)
+
+{Change back to default background mode and color (white)}
+     UseBackground (OPAQUE, 255,255,255)
+
+{Draw more text and another dotted line and hatched rectangle)
+     DrawText(10,60,"Text with an OPAQUE background")
+     UsePen(DOT,1,0,0,0)
+     DrawLine(10,71,40,71)
+     UsePen(SOLID,1,0,0,0)
+     UseBrush(CROSS,0,0,0)
+     DrawRectangle(10,80,40,90)
+
+{Wait for input}
+     WaitInput()

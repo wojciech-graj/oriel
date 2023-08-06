@@ -1,0 +1,26 @@
+{Page 474}
+{------------------------PYRAMID.TXT----------------------------
+This program draws the pyramid bitmap across the screen a set
+number of pixels apart.
+---------------------------------------------------------------}
+{Initialize}
+       Usecoordinates(PIXEL)      {Use pixels, not millimeters}
+       Set x=30                   {Starting x-coordinate}
+       Set y=20                   {Starting y-coordinate}
+       Set Step=31                {Step by 31 pixels at a time)
+
+{Maximize the window}
+       SetWindow(MAXIMIZE)
+
+{Put up the pyramid bitmap for the first time}
+       DrawBitmap(x,y,"C:\WINDOWS\PYRAMID.BMP")
+       WaitInput(1000)             {Pause 1 second)
+
+{Loop to draw the pyramid across the screen}
+Next:  Waitinput(0)
+       DrawBitmap(x,y,"C:\WINDOWS\PYRAMID.BMP")
+       Set x=x+Step
+       If x<600 Then Goto Next
+
+{Leave the finished window up until the user kills it}
+       Waitinput()

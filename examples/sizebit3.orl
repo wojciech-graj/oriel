@@ -1,0 +1,3 @@
+{Page 481}
+DrawSizedBitmap(10,10,50,60,"C:\WINDOWS\PARTY.BMP")
+WaitInput()

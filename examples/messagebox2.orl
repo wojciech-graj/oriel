@@ -1,0 +1,23 @@
+{Page 513}
+{Show a single-line message}
+     MessageBox(OKCANCEL,1,QUESTION,
+     "See a message box with a two-line message?",
+     "One-line message",Button_mashed)
+     If Button_mashed=2 Then Goto Wait_for_input
+
+{Show a two-line message}
+     MessageBox(YESNO,1,QUESTION,
+"This box has two lines of text.
+Do you want to see one with three?",
+     "Two-line message",Button_mashed)
+     If Button_mashed=2 Then Goto Wait_for_input
+
+{Show a three-line message}
+     MessageBox(OK,1,INFORMATION,
+"This box has three lines of text.
+You've now seen message boxes with,
+one, two, and three lines of text.",
+     "Three-line message",Button_mashed)
+
+Wait_for_input:
+     WaitInput()

@@ -1,0 +1,4 @@
+{Page 493}
+UseBrush(SOLID,255,255,0)
+DrawEllipse(20,30,80,60)
+WaitInput()

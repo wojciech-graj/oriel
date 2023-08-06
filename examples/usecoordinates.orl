@@ -1,0 +1,10 @@
+{Page 536}
+UseCoordinates(PIXEL)
+DrawEllipse(50,10,70,30)
+DrawRectangle(50,30,70,50)
+DrawText(50,55,"Pixel")
+UseCoordinates(METRIC)
+DrawEllipse(50,10,70,30)
+DrawRectangle(50,30,70,50)
+DrawText(50,55,"Metric")
+WaitInput()
