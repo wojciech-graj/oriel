@@ -14,8 +14,8 @@ use gtk::prelude::*;
 use crate::ir;
 use crate::vm::*;
 
-macro_rules! cairo_context_getter_opt_set {
-    ($var: ident, $member: ident, $cr: expr) => {
+macro_rules! cairo_context_getter_and_invalidator {
+    ($var: ident, $member: ident, $var_inval:ident, $cr: expr) => {
         fn $var(&self) -> Ref<cairo::Context> {
             {
                 let borrowed = self.$member.borrow();
@@ -30,6 +30,11 @@ macro_rules! cairo_context_getter_opt_set {
             let borrowed = self.$member.borrow();
             $cr(self, borrowed.as_ref().unwrap());
             Ref::map(borrowed, |cr| cr.as_ref().unwrap())
+        }
+
+        fn $var_inval(&self) {
+            let mut borrowed = self.$member.borrow_mut();
+            *borrowed = None;
         }
     };
 }
@@ -91,9 +96,10 @@ impl DrawCtx {
         }
     }
 
-    cairo_context_getter_opt_set!(
+    cairo_context_getter_and_invalidator!(
         cr_text,
         cr_text_,
+        cr_text_inval,
         |draw_ctx: &DrawCtx, cr: &cairo::Context| {
             let (r, g, b) = draw_ctx.text_rgb;
             cr.set_source_rgb(r, g, b);
@@ -101,9 +107,10 @@ impl DrawCtx {
         }
     );
 
-    cairo_context_getter_opt_set!(
+    cairo_context_getter_and_invalidator!(
         cr_pen,
         cr_pen_,
+        cr_pen_inval,
         |draw_ctx: &DrawCtx, cr: &cairo::Context| {
             let (r, g, b) = draw_ctx.pen_rgb;
             cr.set_dash(
@@ -122,9 +129,10 @@ impl DrawCtx {
         }
     );
 
-    cairo_context_getter_opt_set!(
+    cairo_context_getter_and_invalidator!(
         cr_background,
         cr_background_,
+        cr_background_inval,
         |draw_ctx: &DrawCtx, cr: &cairo::Context| {
             let (r, g, b) = draw_ctx.background_rgb;
             cr.set_line_width(draw_ctx.pen_width);
@@ -132,9 +140,10 @@ impl DrawCtx {
         }
     );
 
-    cairo_context_getter_opt_set!(
+    cairo_context_getter_and_invalidator!(
         cr_brush,
         cr_brush_,
+        cr_brush_inval,
         |draw_ctx: &DrawCtx, cr: &cairo::Context| {
             let (r, g, b) = draw_ctx.brush_rgb;
             let pattern = cairo::SurfacePattern::create(match draw_ctx.brush_typ {
@@ -717,15 +726,15 @@ impl<'a> VMSys<'a> for VMSysGtk {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
         draw_ctx.background_transparency = option;
         draw_ctx.background_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
-        *draw_ctx.cr_background_.borrow_mut() = None;
-        *draw_ctx.cr_brush_.borrow_mut() = None;
+        draw_ctx.cr_background_inval();
+        draw_ctx.cr_brush_inval();
     }
 
     fn use_brush(&mut self, option: crate::ir::BrushType, r: u16, g: u16, b: u16) {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
         draw_ctx.brush_typ = option;
         draw_ctx.brush_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
-        *draw_ctx.cr_brush_.borrow_mut() = None;
+        draw_ctx.cr_brush_inval();
     }
 
     fn use_caption(&mut self, text: &str) {
@@ -778,7 +787,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
         draw_ctx.text_face = font_face;
         draw_ctx.text_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
         draw_ctx.text_matrix = matrix;
-        *draw_ctx.cr_text_.borrow_mut() = None;
+        draw_ctx.cr_text_inval();
 
         if width == 0 && height == 0 {
             return;
@@ -792,7 +801,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
             matrix.set_yy(draw_ctx.scaled(height) / extents.height());
         }
         draw_ctx.text_matrix = matrix;
-        *draw_ctx.cr_text_.borrow_mut() = None;
+        draw_ctx.cr_text_inval();
     }
 
     fn use_pen(&mut self, option: crate::ir::PenType, width: u16, r: u16, g: u16, b: u16) {
@@ -801,8 +810,8 @@ impl<'a> VMSys<'a> for VMSysGtk {
         draw_ctx.pen_type = option;
         draw_ctx.pen_width = width.into();
         draw_ctx.pen_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
-        *draw_ctx.cr_pen_.borrow_mut() = None;
-        *draw_ctx.cr_background_.borrow_mut() = None;
+        draw_ctx.cr_pen_inval();
+        draw_ctx.cr_background_inval();
     }
 
     fn wait_input(&mut self, milliseconds: Option<u16>) {
