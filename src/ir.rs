@@ -100,7 +100,7 @@ pub enum FontUnderline {
     NoUnderline,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum VirtualKey {
     Backspace,
     Tab,
@@ -254,22 +254,16 @@ impl TryFrom<u16> for VirtualKey {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct PhysicalKey {
     pub chr: char,
     pub ctrl: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Key<'a> {
     Virtual(Integer<'a>),
     Physical(PhysicalKey),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct SetKeyboardParam<'a> {
-    pub key: Key<'a>,
-    pub label: Identifier<'a>,
 }
 
 #[derive(Debug, Clone)]
@@ -301,7 +295,7 @@ pub struct SetMouseParam<'a> {
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct Identifier<'a>(pub &'a str);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Integer<'a> {
     Literal(u16),
     Variable(Identifier<'a>),
@@ -421,7 +415,7 @@ pub enum Command<'a> {
         op: MathOperator,
         i2: Integer<'a>,
     },
-    SetKeyboard(Vec<SetKeyboardParam<'a>>),
+    SetKeyboard(Option<HashMap<Key<'a>, Identifier<'a>>>),
     SetMenu(Vec<MenuItem<'a>>),
     SetMouse(Vec<SetMouseParam<'a>>),
     SetWaitMode(WaitMode),

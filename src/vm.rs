@@ -28,17 +28,22 @@ impl ir::MathOperator {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Key {
     Virtual(ir::VirtualKey),
     Physical(ir::PhysicalKey),
 }
 
-pub struct SetKeyboardParam<'a> {
-    pub key: Key,
-    pub label: ir::Identifier<'a>,
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct OwnedIdentifier(pub String);
+
+impl<'a> From<ir::Identifier<'a>> for OwnedIdentifier {
+    fn from(value: ir::Identifier<'a>) -> Self {
+        OwnedIdentifier(value.0.to_owned())
+    }
 }
 
-pub trait VMSys<'a> {
+pub trait VMSys {
     fn beep(&mut self);
     fn draw_arc(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16);
     fn draw_background(&mut self);
@@ -72,8 +77,8 @@ pub trait VMSys<'a> {
         caption: &str,
     ) -> u16;
     fn run(&mut self, command: &str);
-    fn set_keyboard(&mut self, params: Vec<SetKeyboardParam>);
-    fn set_menu(&mut self, menu: Vec<ir::MenuItem<'a>>);
+    fn set_keyboard(&mut self, params: Option<HashMap<Key, OwnedIdentifier>>);
+    fn set_menu(&mut self);
     fn set_mouse(&mut self); // TODO
     fn set_wait_mode(&mut self, mode: ir::WaitMode);
     fn set_window(&mut self, option: ir::SetWindowOption);
@@ -115,11 +120,11 @@ pub struct VM<'a> {
     ip: usize,
     vars: HashMap<ir::Identifier<'a>, u16>,
     call_stack: Vec<usize>,
-    ctx: &'a mut dyn VMSys<'a>,
+    ctx: &'a mut dyn VMSys,
 }
 
 macro_rules! integer_value {
-    ($self:ident, $id:ident) => {{
+    ($self:ident, $id:expr) => {{
         ($self.get_integer($id).ok_or_else(|| {
             Error::UndeclaredVariableError(match $id {
                 ir::Integer::Variable(id) => id,
@@ -137,7 +142,7 @@ macro_rules! incr_ip {
 }
 
 impl<'a> VM<'a> {
-    pub fn new(program: &'a ir::Program<'a>, ctx: &'a mut dyn VMSys<'a>) -> Self {
+    pub fn new(program: &'a ir::Program<'a>, ctx: &'a mut dyn VMSys) -> Self {
         VM {
             program,
             ip: 0,
@@ -372,21 +377,26 @@ impl<'a> VM<'a> {
                 self,
                 self.ctx.set_keyboard(
                     params
-                        .iter()
-                        .map(|param| {
-                            Ok(SetKeyboardParam {
-                                key: match param.key {
-                                    ir::Key::Virtual(integer) => Key::Virtual(
-                                        (integer_value!(self, integer)?
-                                            .try_into()
-                                            .map_err(|_| Error::InvalidVirtualKeyError))?,
-                                    ),
-                                    ir::Key::Physical(physical) => Key::Physical(physical),
-                                },
-                                label: param.label,
-                            })
+                        .as_ref()
+                        .map(|hashmap| {
+                            hashmap
+                                .iter()
+                                .map(|(&key, &label)| {
+                                    Ok((
+                                        match key {
+                                            ir::Key::Virtual(integer) => Key::Virtual(
+                                                (integer_value!(self, integer)?
+                                                    .try_into()
+                                                    .map_err(|_| Error::InvalidVirtualKeyError))?,
+                                            ),
+                                            ir::Key::Physical(physical) => Key::Physical(physical),
+                                        },
+                                        label.into(),
+                                    ))
+                                })
+                                .collect::<Result<HashMap<_, _>, _>>()
                         })
-                        .collect::<Result<Vec<_>, _>>()?
+                        .transpose()?
                 )
             ),
             ir::Command::SetMenu(_) => {}  //TODO

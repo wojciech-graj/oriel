@@ -1,5 +1,6 @@
 use std::cell::Ref;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::f64::consts::TAU;
 use std::process;
@@ -368,10 +369,25 @@ impl DrawCtx {
     }
 }
 
+struct InputCtx {
+    keyboard: Option<HashMap<vm::Key, vm::OwnedIdentifier>>,
+    input: Option<vm::OwnedIdentifier>,
+}
+
+impl InputCtx {
+    fn new() -> Self {
+        InputCtx {
+            keyboard: None,
+            input: None,
+        }
+    }
+}
+
 pub struct VMSysGtk {
     window: gtk::Window,
     menu_bar: gtk::MenuBar,
     draw_ctx: Rc<RefCell<DrawCtx>>,
+    input_ctx: Rc<RefCell<InputCtx>>,
     wait_mode: ir::WaitMode,
 }
 
@@ -407,7 +423,7 @@ impl VMSysGtk {
         let drawing_area = gtk::DrawingArea::new();
         mainbox.pack_start(&drawing_area, true, true, 0);
 
-        let draw_ctx = { Rc::new(RefCell::new(DrawCtx::new())) };
+        let draw_ctx = Rc::new(RefCell::new(DrawCtx::new()));
 
         let draw_ctx_clone = draw_ctx.clone();
         drawing_area.connect_draw(move |_, cr| {
@@ -425,12 +441,21 @@ impl VMSysGtk {
                 .resize(rect.width(), rect.height());
         });
 
+        let input_ctx = Rc::new(RefCell::new(InputCtx::new()));
+
+        let input_ctx_clone = input_ctx.clone();
+        window.connect_key_press_event(move |_, event_key| {
+            let mut input_ctx = input_ctx_clone.borrow_mut();
+            Inhibit(false)
+        });
+
         window.show_all();
 
         let mut sys = VMSysGtk {
             window,
             menu_bar,
             draw_ctx,
+            input_ctx,
             wait_mode: ir::WaitMode::Null,
         };
 
@@ -463,7 +488,7 @@ fn command_conv(command: &str) -> &str {
     }
 }
 
-impl<'a> vm::VMSys<'a> for VMSysGtk {
+impl vm::VMSys for VMSysGtk {
     fn beep(&mut self) {
         self.window.window().unwrap().beep();
     }
@@ -788,11 +813,11 @@ impl<'a> vm::VMSys<'a> for VMSysGtk {
         process::Command::new(command).spawn().ok();
     }
 
-    fn set_keyboard(&mut self, params: Vec<vm::SetKeyboardParam>) {
-        todo!()
+    fn set_keyboard(&mut self, params: Option<HashMap<vm::Key, vm::OwnedIdentifier>>) {
+        self.input_ctx.borrow_mut().keyboard = params;
     }
 
-    fn set_menu(&mut self, menu: Vec<ir::MenuItem<'a>>) {
+    fn set_menu(&mut self) {
         todo!()
     }
 
@@ -926,7 +951,10 @@ impl<'a> vm::VMSys<'a> for VMSysGtk {
                         }
                     }
                 } else {
-                    //TODO
+                    while gtk::events_pending() {
+                        gtk::main_iteration();
+                    }
+
                     while self.window.is_visible() {
                         while gtk::events_pending() {
                             gtk::main_iteration();

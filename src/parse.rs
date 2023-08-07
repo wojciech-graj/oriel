@@ -353,16 +353,15 @@ impl<'a> Command<'a> {
                 button_pushed: Identifier(next_pair!(kwords)?.as_str()),
             },
             "run" => Command::Run(next_pair_str_lit(kwords)?),
-            "setkeyboard" => {
-                let mut params: Vec<SetKeyboardParam> = Vec::new();
+            "setkeyboard" => Command::SetKeyboard(if kwords.peek().is_some() {
+                let mut params: HashMap<Key, Identifier> = HashMap::new();
                 while kwords.peek().is_some() {
-                    params.push(SetKeyboardParam {
-                        key: next_pair!(kwords)?.try_into()?,
-                        label: next_pair!(kwords)?.into(),
-                    });
+                    params.insert(next_pair!(kwords)?.try_into()?, next_pair!(kwords)?.into());
                 }
-                Command::SetKeyboard(params)
-            }
+                Some(params)
+            } else {
+                None
+            }),
             "setmenu" => Command::SetMenu(Vec::new()),
             "setmouse" => {
                 let mut params: Vec<SetMouseParam> = Vec::new();
