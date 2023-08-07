@@ -2,30 +2,40 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::ir::*;
+use crate::ir;
 
-impl LogicalOperator {
+impl ir::LogicalOperator {
     fn cmp(&self, i1: u16, i2: u16) -> bool {
         match self {
-            LogicalOperator::Equal => i1 == i2,
-            LogicalOperator::Less => i1 < i2,
-            LogicalOperator::Greater => i1 > i2,
-            LogicalOperator::LEqual => i1 <= i2,
-            LogicalOperator::GEqual => i1 >= i2,
-            LogicalOperator::NEqual => i1 != i2,
+            ir::LogicalOperator::Equal => i1 == i2,
+            ir::LogicalOperator::Less => i1 < i2,
+            ir::LogicalOperator::Greater => i1 > i2,
+            ir::LogicalOperator::LEqual => i1 <= i2,
+            ir::LogicalOperator::GEqual => i1 >= i2,
+            ir::LogicalOperator::NEqual => i1 != i2,
         }
     }
 }
 
-impl MathOperator {
+impl ir::MathOperator {
     fn eval(&self, i1: u16, i2: u16) -> Option<u16> {
         (match self {
-            MathOperator::Add => u16::checked_add,
-            MathOperator::Subtract => u16::checked_sub,
-            MathOperator::Multiply => u16::checked_mul,
-            MathOperator::Divide => u16::checked_div,
+            ir::MathOperator::Add => u16::checked_add,
+            ir::MathOperator::Subtract => u16::checked_sub,
+            ir::MathOperator::Multiply => u16::checked_mul,
+            ir::MathOperator::Divide => u16::checked_div,
         })(i1, i2)
     }
+}
+
+pub enum Key {
+    Virtual(ir::VirtualKey),
+    Physical(ir::PhysicalKey),
+}
+
+pub struct SetKeyboardParam<'a> {
+    pub key: Key,
+    pub label: ir::Identifier<'a>,
 }
 
 pub trait VMSys<'a> {
@@ -55,35 +65,35 @@ pub trait VMSys<'a> {
     fn draw_text(&mut self, x: u16, y: u16, text: &str);
     fn message_box(
         &mut self,
-        typ: MessageBoxType,
+        typ: ir::MessageBoxType,
         default_button: u16,
-        icon: MessageBoxIcon,
+        icon: ir::MessageBoxIcon,
         text: &str,
         caption: &str,
     ) -> u16;
     fn run(&mut self, command: &str);
-    fn set_keyboard(&mut self); // TODO
-    fn set_menu(&mut self, menu: Vec<MenuItem<'a>>);
+    fn set_keyboard(&mut self, params: Vec<SetKeyboardParam>);
+    fn set_menu(&mut self, menu: Vec<ir::MenuItem<'a>>);
     fn set_mouse(&mut self); // TODO
-    fn set_wait_mode(&mut self, mode: WaitMode);
-    fn set_window(&mut self, option: SetWindowOption);
-    fn use_background(&mut self, option: BackgroundTransparency, r: u16, g: u16, b: u16);
-    fn use_brush(&mut self, option: BrushType, r: u16, g: u16, b: u16);
+    fn set_wait_mode(&mut self, mode: ir::WaitMode);
+    fn set_window(&mut self, option: ir::SetWindowOption);
+    fn use_background(&mut self, option: ir::BackgroundTransparency, r: u16, g: u16, b: u16);
+    fn use_brush(&mut self, option: ir::BrushType, r: u16, g: u16, b: u16);
     fn use_caption(&mut self, text: &str);
-    fn use_coordinates(&mut self, option: Coordinates);
+    fn use_coordinates(&mut self, option: ir::Coordinates);
     fn use_font(
         &mut self,
         name: &str,
         width: u16,
         height: u16,
-        bold: FontWeight,
-        italic: FontSlant,
-        underline: FontUnderline,
+        bold: ir::FontWeight,
+        italic: ir::FontSlant,
+        underline: ir::FontUnderline,
         r: u16,
         g: u16,
         b: u16,
     );
-    fn use_pen(&mut self, option: PenType, width: u16, r: u16, g: u16, b: u16);
+    fn use_pen(&mut self, option: ir::PenType, width: u16, r: u16, g: u16, b: u16);
     fn wait_input(&mut self, milliseconds: Option<u16>);
 }
 
@@ -91,29 +101,31 @@ pub trait VMSys<'a> {
 #[derive(Error, Debug)]
 pub enum Error<'a> {
     #[error("Attempted to use undeclared variable '{}'", (.0).0)]
-    UndeclaredVariableError(Identifier<'a>),
+    UndeclaredVariableError(ir::Identifier<'a>),
     #[error("Call stack exhausted")]
     CallStackExhaustedError,
     #[error("Integer Under/Over-flow")]
     MathOperationError,
+    #[error("Invalid Virtual Key")]
+    InvalidVirtualKeyError,
 }
 
 pub struct VM<'a> {
-    program: &'a Program<'a>,
+    program: &'a ir::Program<'a>,
     ip: usize,
-    vars: HashMap<Identifier<'a>, u16>,
+    vars: HashMap<ir::Identifier<'a>, u16>,
     call_stack: Vec<usize>,
     ctx: &'a mut dyn VMSys<'a>,
 }
 
 macro_rules! integer_value {
     ($self:ident, $id:ident) => {{
-        $self.get_integer($id).ok_or_else(|| {
+        ($self.get_integer($id).ok_or_else(|| {
             Error::UndeclaredVariableError(match $id {
-                Integer::Variable(id) => id,
-                Integer::Literal(_) => unreachable!(),
+                ir::Integer::Variable(id) => id,
+                ir::Integer::Literal(_) => unreachable!(),
             })
-        })?
+        }))
     }};
 }
 
@@ -125,7 +137,7 @@ macro_rules! incr_ip {
 }
 
 impl<'a> VM<'a> {
-    pub fn new(program: &'a Program<'a>, ctx: &'a mut dyn VMSys<'a>) -> Self {
+    pub fn new(program: &'a ir::Program<'a>, ctx: &'a mut dyn VMSys<'a>) -> Self {
         VM {
             program,
             ip: 0,
@@ -135,22 +147,22 @@ impl<'a> VM<'a> {
         }
     }
 
-    fn get_integer(&self, i: Integer) -> Option<u16> {
+    fn get_integer(&self, i: ir::Integer) -> Option<u16> {
         match i {
-            Integer::Literal(val) => Some(val),
-            Integer::Variable(ref ident) => self.vars.get(ident).cloned(),
+            ir::Integer::Literal(val) => Some(val),
+            ir::Integer::Variable(ref ident) => self.vars.get(ident).cloned(),
         }
     }
 
-    fn set_variable(&mut self, ident: Identifier<'a>, val: u16) {
+    fn set_variable(&mut self, ident: ir::Identifier<'a>, val: u16) {
         self.vars.insert(ident, val);
     }
 
     pub fn step(&mut self) -> Result<bool, Error<'a>> {
         let cmd = &self.program.commands[self.ip];
         match *cmd {
-            Command::Beep => incr_ip!(self, self.ctx.beep()),
-            Command::DrawArc {
+            ir::Command::Beep => incr_ip!(self, self.ctx.beep()),
+            ir::Command::DrawArc {
                 x1,
                 y1,
                 x2,
@@ -162,23 +174,23 @@ impl<'a> VM<'a> {
             } => incr_ip!(
                 self,
                 self.ctx.draw_arc(
-                    integer_value!(self, x1),
-                    integer_value!(self, y1),
-                    integer_value!(self, x2),
-                    integer_value!(self, y2),
-                    integer_value!(self, x3),
-                    integer_value!(self, y3),
-                    integer_value!(self, x4),
-                    integer_value!(self, y4),
+                    integer_value!(self, x1)?,
+                    integer_value!(self, y1)?,
+                    integer_value!(self, x2)?,
+                    integer_value!(self, y2)?,
+                    integer_value!(self, x3)?,
+                    integer_value!(self, y3)?,
+                    integer_value!(self, x4)?,
+                    integer_value!(self, y4)?,
                 )
             ),
-            Command::DrawBackground => incr_ip!(self, self.ctx.draw_background()),
-            Command::DrawBitmap { x, y, filename } => incr_ip!(
+            ir::Command::DrawBackground => incr_ip!(self, self.ctx.draw_background()),
+            ir::Command::DrawBitmap { x, y, filename } => incr_ip!(
                 self,
                 self.ctx
-                    .draw_bitmap(integer_value!(self, x), integer_value!(self, y), filename)
+                    .draw_bitmap(integer_value!(self, x)?, integer_value!(self, y)?, filename)
             ),
-            Command::DrawChord {
+            ir::Command::DrawChord {
                 x1,
                 y1,
                 x2,
@@ -190,53 +202,53 @@ impl<'a> VM<'a> {
             } => incr_ip!(
                 self,
                 self.ctx.draw_chord(
-                    integer_value!(self, x1),
-                    integer_value!(self, y1),
-                    integer_value!(self, x2),
-                    integer_value!(self, y2),
-                    integer_value!(self, x3),
-                    integer_value!(self, y3),
-                    integer_value!(self, x4),
-                    integer_value!(self, y4),
+                    integer_value!(self, x1)?,
+                    integer_value!(self, y1)?,
+                    integer_value!(self, x2)?,
+                    integer_value!(self, y2)?,
+                    integer_value!(self, x3)?,
+                    integer_value!(self, y3)?,
+                    integer_value!(self, x4)?,
+                    integer_value!(self, y4)?,
                 )
             ),
-            Command::DrawEllipse { x1, y1, x2, y2 } => incr_ip!(
+            ir::Command::DrawEllipse { x1, y1, x2, y2 } => incr_ip!(
                 self,
                 self.ctx.draw_ellipse(
-                    integer_value!(self, x1),
-                    integer_value!(self, y1),
-                    integer_value!(self, x2),
-                    integer_value!(self, y2),
+                    integer_value!(self, x1)?,
+                    integer_value!(self, y1)?,
+                    integer_value!(self, x2)?,
+                    integer_value!(self, y2)?,
                 )
             ),
-            Command::DrawFlood { x, y, r, g, b } => incr_ip!(
+            ir::Command::DrawFlood { x, y, r, g, b } => incr_ip!(
                 self,
                 self.ctx.draw_flood(
-                    integer_value!(self, x),
-                    integer_value!(self, y),
-                    integer_value!(self, r),
-                    integer_value!(self, g),
-                    integer_value!(self, b),
+                    integer_value!(self, x)?,
+                    integer_value!(self, y)?,
+                    integer_value!(self, r)?,
+                    integer_value!(self, g)?,
+                    integer_value!(self, b)?,
                 )
             ),
-            Command::DrawLine { x1, y1, x2, y2 } => incr_ip!(
+            ir::Command::DrawLine { x1, y1, x2, y2 } => incr_ip!(
                 self,
                 self.ctx.draw_line(
-                    integer_value!(self, x1),
-                    integer_value!(self, y1),
-                    integer_value!(self, x2),
-                    integer_value!(self, y2),
+                    integer_value!(self, x1)?,
+                    integer_value!(self, y1)?,
+                    integer_value!(self, x2)?,
+                    integer_value!(self, y2)?,
                 )
             ),
-            Command::DrawNumber { x, y, n } => incr_ip!(
+            ir::Command::DrawNumber { x, y, n } => incr_ip!(
                 self,
                 self.ctx.draw_number(
-                    integer_value!(self, x),
-                    integer_value!(self, y),
-                    integer_value!(self, n),
+                    integer_value!(self, x)?,
+                    integer_value!(self, y)?,
+                    integer_value!(self, n)?,
                 )
             ),
-            Command::DrawPie {
+            ir::Command::DrawPie {
                 x1,
                 y1,
                 x2,
@@ -248,26 +260,26 @@ impl<'a> VM<'a> {
             } => incr_ip!(
                 self,
                 self.ctx.draw_pie(
-                    integer_value!(self, x1),
-                    integer_value!(self, y1),
-                    integer_value!(self, x2),
-                    integer_value!(self, y2),
-                    integer_value!(self, x3),
-                    integer_value!(self, y3),
-                    integer_value!(self, x4),
-                    integer_value!(self, y4),
+                    integer_value!(self, x1)?,
+                    integer_value!(self, y1)?,
+                    integer_value!(self, x2)?,
+                    integer_value!(self, y2)?,
+                    integer_value!(self, x3)?,
+                    integer_value!(self, y3)?,
+                    integer_value!(self, x4)?,
+                    integer_value!(self, y4)?,
                 )
             ),
-            Command::DrawRectangle { x1, y1, x2, y2 } => incr_ip!(
+            ir::Command::DrawRectangle { x1, y1, x2, y2 } => incr_ip!(
                 self,
                 self.ctx.draw_rectangle(
-                    integer_value!(self, x1),
-                    integer_value!(self, y1),
-                    integer_value!(self, x2),
-                    integer_value!(self, y2),
+                    integer_value!(self, x1)?,
+                    integer_value!(self, y1)?,
+                    integer_value!(self, x2)?,
+                    integer_value!(self, y2)?,
                 )
             ),
-            Command::DrawRoundRectangle {
+            ir::Command::DrawRoundRectangle {
                 x1,
                 y1,
                 x2,
@@ -277,15 +289,15 @@ impl<'a> VM<'a> {
             } => incr_ip!(
                 self,
                 self.ctx.draw_round_rectangle(
-                    integer_value!(self, x1),
-                    integer_value!(self, y1),
-                    integer_value!(self, x2),
-                    integer_value!(self, y2),
-                    integer_value!(self, x3),
-                    integer_value!(self, y3),
+                    integer_value!(self, x1)?,
+                    integer_value!(self, y1)?,
+                    integer_value!(self, x2)?,
+                    integer_value!(self, y2)?,
+                    integer_value!(self, x3)?,
+                    integer_value!(self, y3)?,
                 )
             ),
-            Command::DrawSizedBitmap {
+            ir::Command::DrawSizedBitmap {
                 x1,
                 y1,
                 x2,
@@ -294,43 +306,43 @@ impl<'a> VM<'a> {
             } => incr_ip!(
                 self,
                 self.ctx.draw_sized_bitmap(
-                    integer_value!(self, x1),
-                    integer_value!(self, y1),
-                    integer_value!(self, x2),
-                    integer_value!(self, y2),
+                    integer_value!(self, x1)?,
+                    integer_value!(self, y1)?,
+                    integer_value!(self, x2)?,
+                    integer_value!(self, y2)?,
                     filename,
                 )
             ),
-            Command::DrawText { x, y, text } => incr_ip!(
+            ir::Command::DrawText { x, y, text } => incr_ip!(
                 self,
                 self.ctx
-                    .draw_text(integer_value!(self, x), integer_value!(self, y), text)
+                    .draw_text(integer_value!(self, x)?, integer_value!(self, y)?, text)
             ),
-            Command::End => return Ok(false),
-            Command::Gosub(ref ident) => {
+            ir::Command::End => return Ok(false),
+            ir::Command::Gosub(ref ident) => {
                 self.call_stack.push(self.ip + 1);
                 self.ip = *(self.program.labels.get(ident).unwrap());
             }
-            Command::Return => {
+            ir::Command::Return => {
                 self.ip = self
                     .call_stack
                     .pop()
                     .ok_or_else(|| Error::CallStackExhaustedError)?
             }
-            Command::Goto(ref ident) => self.ip = *(self.program.labels.get(ident).unwrap()),
-            Command::If {
+            ir::Command::Goto(ref ident) => self.ip = *(self.program.labels.get(ident).unwrap()),
+            ir::Command::If {
                 i1,
                 op,
                 i2,
                 goto_false,
             } => {
-                self.ip = if !op.cmp(integer_value!(self, i1), integer_value!(self, i2)) {
+                self.ip = if !op.cmp(integer_value!(self, i1)?, integer_value!(self, i2)?) {
                     goto_false
                 } else {
                     self.ip + 1
                 }
             }
-            Command::MessageBox {
+            ir::Command::MessageBox {
                 typ,
                 default_button,
                 icon,
@@ -340,50 +352,70 @@ impl<'a> VM<'a> {
             } => {
                 let button_pushed_val = self.ctx.message_box(
                     typ,
-                    integer_value!(self, default_button),
+                    integer_value!(self, default_button)?,
                     icon,
                     text,
                     caption,
                 );
                 incr_ip!(self, self.set_variable(button_pushed, button_pushed_val));
             }
-            Command::Run(command) => incr_ip!(self, self.ctx.run(command)),
-            Command::Set { var, i1, op, i2 } => incr_ip!(
+            ir::Command::Run(command) => incr_ip!(self, self.ctx.run(command)),
+            ir::Command::Set { var, i1, op, i2 } => incr_ip!(
                 self,
                 self.set_variable(
                     var,
-                    op.eval(integer_value!(self, i1), integer_value!(self, i2))
+                    op.eval(integer_value!(self, i1)?, integer_value!(self, i2)?)
                         .ok_or_else(|| Error::MathOperationError)?,
                 )
             ),
-            Command::SetKeyboard(_) => {} //TODO
-            Command::SetMenu(_) => {}     //TODO
-            Command::SetMouse(_) => {}    //TODO
-            Command::SetWaitMode(mode) => incr_ip!(self, self.ctx.set_wait_mode(mode)),
-            Command::SetWindow(option) => incr_ip!(self, self.ctx.set_window(option)),
-            Command::UseBackground { option, r, g, b } => incr_ip!(
+            ir::Command::SetKeyboard(ref params) => incr_ip!(
+                self,
+                self.ctx.set_keyboard(
+                    params
+                        .iter()
+                        .map(|param| {
+                            Ok(SetKeyboardParam {
+                                key: match param.key {
+                                    ir::Key::Virtual(integer) => Key::Virtual(
+                                        (integer_value!(self, integer)?
+                                            .try_into()
+                                            .map_err(|_| Error::InvalidVirtualKeyError))?,
+                                    ),
+                                    ir::Key::Physical(physical) => Key::Physical(physical),
+                                },
+                                label: param.label,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?
+                )
+            ),
+            ir::Command::SetMenu(_) => {}  //TODO
+            ir::Command::SetMouse(_) => {} //TODO
+            ir::Command::SetWaitMode(mode) => incr_ip!(self, self.ctx.set_wait_mode(mode)),
+            ir::Command::SetWindow(option) => incr_ip!(self, self.ctx.set_window(option)),
+            ir::Command::UseBackground { option, r, g, b } => incr_ip!(
                 self,
                 self.ctx.use_background(
                     option,
-                    integer_value!(self, r),
-                    integer_value!(self, g),
-                    integer_value!(self, b),
+                    integer_value!(self, r)?,
+                    integer_value!(self, g)?,
+                    integer_value!(self, b)?,
                 )
             ),
-            Command::UseBrush { option, r, g, b } => incr_ip!(
+            ir::Command::UseBrush { option, r, g, b } => incr_ip!(
                 self,
                 self.ctx.use_brush(
                     option,
-                    integer_value!(self, r),
-                    integer_value!(self, g),
-                    integer_value!(self, b),
+                    integer_value!(self, r)?,
+                    integer_value!(self, g)?,
+                    integer_value!(self, b)?,
                 )
             ),
-            Command::UseCaption(text) => incr_ip!(self, self.ctx.use_caption(text)),
-            Command::UseCoordinates(coordinates) => {
+            ir::Command::UseCaption(text) => incr_ip!(self, self.ctx.use_caption(text)),
+            ir::Command::UseCoordinates(coordinates) => {
                 incr_ip!(self, self.ctx.use_coordinates(coordinates))
             }
-            Command::UseFont {
+            ir::Command::UseFont {
                 name,
                 width,
                 height,
@@ -397,17 +429,17 @@ impl<'a> VM<'a> {
                 self,
                 self.ctx.use_font(
                     name,
-                    integer_value!(self, width),
-                    integer_value!(self, height),
+                    integer_value!(self, width)?,
+                    integer_value!(self, height)?,
                     bold,
                     italic,
                     underline,
-                    integer_value!(self, r),
-                    integer_value!(self, g),
-                    integer_value!(self, b),
+                    integer_value!(self, r)?,
+                    integer_value!(self, g)?,
+                    integer_value!(self, b)?,
                 )
             ),
-            Command::UsePen {
+            ir::Command::UsePen {
                 option,
                 width,
                 r,
@@ -417,16 +449,16 @@ impl<'a> VM<'a> {
                 self,
                 self.ctx.use_pen(
                     option,
-                    integer_value!(self, width),
-                    integer_value!(self, r),
-                    integer_value!(self, g),
-                    integer_value!(self, b),
+                    integer_value!(self, width)?,
+                    integer_value!(self, r)?,
+                    integer_value!(self, g)?,
+                    integer_value!(self, b)?,
                 )
             ),
-            Command::WaitInput(milliseconds) => incr_ip!(
+            ir::Command::WaitInput(milliseconds) => incr_ip!(
                 self,
                 self.ctx.wait_input(if let Some(i) = milliseconds {
-                    Some(integer_value!(self, i))
+                    Some(integer_value!(self, i)?)
                 } else {
                     None
                 })

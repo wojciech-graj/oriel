@@ -12,7 +12,8 @@ use gtk::gdk_pixbuf;
 use gtk::prelude::*;
 
 use crate::ir;
-use crate::vm::*;
+use crate::vm;
+use crate::vm::VMSys;
 
 macro_rules! cairo_context_getter_and_invalidator {
     ($var: ident, $member: ident, $var_inval:ident, $cr: expr) => {
@@ -462,7 +463,7 @@ fn command_conv(command: &str) -> &str {
     }
 }
 
-impl<'a> VMSys<'a> for VMSysGtk {
+impl<'a> vm::VMSys<'a> for VMSysGtk {
     fn beep(&mut self) {
         self.window.window().unwrap().beep();
     }
@@ -787,7 +788,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
         process::Command::new(command).spawn().ok();
     }
 
-    fn set_keyboard(&mut self) {
+    fn set_keyboard(&mut self, params: Vec<vm::SetKeyboardParam>) {
         todo!()
     }
 

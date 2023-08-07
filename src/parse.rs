@@ -16,23 +16,14 @@ struct IdentParser;
 
 macro_rules! next_pair {
     ($pairs:expr) => {
-        (&($pairs.next().ok_or_else(|| Error::MissingArgError)?))
+        ($pairs.next().as_ref().ok_or_else(|| Error::MissingArgError))
     };
 }
 
 macro_rules! next_pair_unchecked {
     ($pairs:expr) => {
-        (&($pairs.next().unwrap()))
+        ($pairs.next().as_ref().unwrap())
     };
-}
-
-macro_rules! next_pair_str_lit {
-    ($pairs:expr) => {{
-        let span = next_pair!($pairs).as_span();
-        pest::Span::new(span.get_input(), span.start() + 1, span.end() - 1)
-            .unwrap()
-            .as_str()
-    }};
 }
 
 macro_rules! enum_impl_from_str {
@@ -49,6 +40,20 @@ macro_rules! enum_impl_from_str {
             }
         }
     };
+}
+
+fn next_pair_str_lit<'a>(pairs: &mut Pairs<'a, Rule>) -> Result<&'a str, Error<'a>> {
+    let pair = &(pairs.next().ok_or_else(|| Error::MissingArgError)?);
+    if let Rule::string = pair.as_rule() {
+        let span = pair.as_span();
+        Ok(
+            pest::Span::new(span.get_input(), span.start() + 1, span.end() - 1)
+                .unwrap()
+                .as_str(),
+        )
+    } else {
+        Err(Error::ArgTypeError(pair.into(), pair.as_str()))
+    }
 }
 
 enum_impl_from_str!(
@@ -135,6 +140,43 @@ enum_impl_from_str!(
     (NoUnderline, "NOUNDERLINE")
 );
 
+impl<'a> TryFrom<&Pair<'a, Rule>> for PhysicalKey {
+    type Error = Error<'a>;
+
+    fn try_from(value: &Pair<'a, Rule>) -> Result<Self, Self::Error> {
+        let s = value.as_str();
+        match s.len() {
+            len @ (3 | 4) => {
+                let c = s.chars().nth(len - 2).unwrap();
+                if (len == 4 && s.chars().nth(1).unwrap() != '^')
+                    || !c.is_ascii_graphic()
+                    || c.is_ascii_whitespace()
+                {
+                    Err(Error::InvalidPhysicalKeyError(s))
+                } else {
+                    Ok(PhysicalKey {
+                        chr: c,
+                        ctrl: len == 4,
+                    })
+                }
+            }
+            _ => Err(Error::InvalidPhysicalKeyError(s)),
+        }
+    }
+}
+
+impl<'a> TryFrom<&Pair<'a, Rule>> for Key<'a> {
+    type Error = Error<'a>;
+
+    fn try_from(value: &Pair<'a, Rule>) -> Result<Self, Self::Error> {
+        match value.as_rule() {
+            Rule::identifier | Rule::integer => Ok(Key::Virtual(value.try_into()?)),
+            Rule::string => Ok(Key::Physical(value.try_into()?)),
+            _ => Err(Error::ArgTypeError(value.into(), value.as_str())),
+        }
+    }
+}
+
 impl<'a> From<&Pair<'a, Rule>> for Identifier<'a> {
     fn from(value: &Pair<'a, Rule>) -> Self {
         Identifier(value.as_str())
@@ -191,6 +233,10 @@ pub enum Error<'a> {
     LabelIndentationError(ErrorLoc, &'a str),
     #[error("{} Command '{}' has too many arguments", .0, .1)]
     ExtraneousArgError(ErrorLoc, &'a str),
+    #[error("{} Argument '{}' has incorrect type", .0, .1)]
+    ArgTypeError(ErrorLoc, &'a str),
+    #[error("Physical key '{}' is invalid", .0)]
+    InvalidPhysicalKeyError(&'a str),
 }
 
 impl From<pest::error::Error<Rule>> for Error<'_> {
@@ -214,105 +260,105 @@ impl<'a> Command<'a> {
         let fname = next_pair_unchecked!(kwords).as_str();
         let command = match fname.to_lowercase().as_str() {
             "drawarc" => Command::DrawArc {
-                x1: next_pair!(kwords).try_into()?,
-                y1: next_pair!(kwords).try_into()?,
-                x2: next_pair!(kwords).try_into()?,
-                y2: next_pair!(kwords).try_into()?,
-                x3: next_pair!(kwords).try_into()?,
-                y3: next_pair!(kwords).try_into()?,
-                x4: next_pair!(kwords).try_into()?,
-                y4: next_pair!(kwords).try_into()?,
+                x1: next_pair!(kwords)?.try_into()?,
+                y1: next_pair!(kwords)?.try_into()?,
+                x2: next_pair!(kwords)?.try_into()?,
+                y2: next_pair!(kwords)?.try_into()?,
+                x3: next_pair!(kwords)?.try_into()?,
+                y3: next_pair!(kwords)?.try_into()?,
+                x4: next_pair!(kwords)?.try_into()?,
+                y4: next_pair!(kwords)?.try_into()?,
             },
             "drawbitmap" => Command::DrawBitmap {
-                x: next_pair!(kwords).try_into()?,
-                y: next_pair!(kwords).try_into()?,
-                filename: next_pair_str_lit!(kwords),
+                x: next_pair!(kwords)?.try_into()?,
+                y: next_pair!(kwords)?.try_into()?,
+                filename: next_pair_str_lit(kwords)?,
             },
             "drawchord" => Command::DrawChord {
-                x1: next_pair!(kwords).try_into()?,
-                y1: next_pair!(kwords).try_into()?,
-                x2: next_pair!(kwords).try_into()?,
-                y2: next_pair!(kwords).try_into()?,
-                x3: next_pair!(kwords).try_into()?,
-                y3: next_pair!(kwords).try_into()?,
-                x4: next_pair!(kwords).try_into()?,
-                y4: next_pair!(kwords).try_into()?,
+                x1: next_pair!(kwords)?.try_into()?,
+                y1: next_pair!(kwords)?.try_into()?,
+                x2: next_pair!(kwords)?.try_into()?,
+                y2: next_pair!(kwords)?.try_into()?,
+                x3: next_pair!(kwords)?.try_into()?,
+                y3: next_pair!(kwords)?.try_into()?,
+                x4: next_pair!(kwords)?.try_into()?,
+                y4: next_pair!(kwords)?.try_into()?,
             },
             "drawellipse" => Command::DrawEllipse {
-                x1: next_pair!(kwords).try_into()?,
-                y1: next_pair!(kwords).try_into()?,
-                x2: next_pair!(kwords).try_into()?,
-                y2: next_pair!(kwords).try_into()?,
+                x1: next_pair!(kwords)?.try_into()?,
+                y1: next_pair!(kwords)?.try_into()?,
+                x2: next_pair!(kwords)?.try_into()?,
+                y2: next_pair!(kwords)?.try_into()?,
             },
             "drawflood" => Command::DrawFlood {
-                x: next_pair!(kwords).try_into()?,
-                y: next_pair!(kwords).try_into()?,
-                r: next_pair!(kwords).try_into()?,
-                g: next_pair!(kwords).try_into()?,
-                b: next_pair!(kwords).try_into()?,
+                x: next_pair!(kwords)?.try_into()?,
+                y: next_pair!(kwords)?.try_into()?,
+                r: next_pair!(kwords)?.try_into()?,
+                g: next_pair!(kwords)?.try_into()?,
+                b: next_pair!(kwords)?.try_into()?,
             },
             "drawline" => Command::DrawLine {
-                x1: next_pair!(kwords).try_into()?,
-                y1: next_pair!(kwords).try_into()?,
-                x2: next_pair!(kwords).try_into()?,
-                y2: next_pair!(kwords).try_into()?,
+                x1: next_pair!(kwords)?.try_into()?,
+                y1: next_pair!(kwords)?.try_into()?,
+                x2: next_pair!(kwords)?.try_into()?,
+                y2: next_pair!(kwords)?.try_into()?,
             },
             "drawnumber" => Command::DrawNumber {
-                x: next_pair!(kwords).try_into()?,
-                y: next_pair!(kwords).try_into()?,
-                n: next_pair!(kwords).try_into()?,
+                x: next_pair!(kwords)?.try_into()?,
+                y: next_pair!(kwords)?.try_into()?,
+                n: next_pair!(kwords)?.try_into()?,
             },
             "drawpie" => Command::DrawPie {
-                x1: next_pair!(kwords).try_into()?,
-                y1: next_pair!(kwords).try_into()?,
-                x2: next_pair!(kwords).try_into()?,
-                y2: next_pair!(kwords).try_into()?,
-                x3: next_pair!(kwords).try_into()?,
-                y3: next_pair!(kwords).try_into()?,
-                x4: next_pair!(kwords).try_into()?,
-                y4: next_pair!(kwords).try_into()?,
+                x1: next_pair!(kwords)?.try_into()?,
+                y1: next_pair!(kwords)?.try_into()?,
+                x2: next_pair!(kwords)?.try_into()?,
+                y2: next_pair!(kwords)?.try_into()?,
+                x3: next_pair!(kwords)?.try_into()?,
+                y3: next_pair!(kwords)?.try_into()?,
+                x4: next_pair!(kwords)?.try_into()?,
+                y4: next_pair!(kwords)?.try_into()?,
             },
             "drawrectangle" => Command::DrawRectangle {
-                x1: next_pair!(kwords).try_into()?,
-                y1: next_pair!(kwords).try_into()?,
-                x2: next_pair!(kwords).try_into()?,
-                y2: next_pair!(kwords).try_into()?,
+                x1: next_pair!(kwords)?.try_into()?,
+                y1: next_pair!(kwords)?.try_into()?,
+                x2: next_pair!(kwords)?.try_into()?,
+                y2: next_pair!(kwords)?.try_into()?,
             },
             "drawroundrectangle" => Command::DrawRoundRectangle {
-                x1: next_pair!(kwords).try_into()?,
-                y1: next_pair!(kwords).try_into()?,
-                x2: next_pair!(kwords).try_into()?,
-                y2: next_pair!(kwords).try_into()?,
-                x3: next_pair!(kwords).try_into()?,
-                y3: next_pair!(kwords).try_into()?,
+                x1: next_pair!(kwords)?.try_into()?,
+                y1: next_pair!(kwords)?.try_into()?,
+                x2: next_pair!(kwords)?.try_into()?,
+                y2: next_pair!(kwords)?.try_into()?,
+                x3: next_pair!(kwords)?.try_into()?,
+                y3: next_pair!(kwords)?.try_into()?,
             },
             "drawsizedbitmap" => Command::DrawSizedBitmap {
-                x1: next_pair!(kwords).try_into()?,
-                y1: next_pair!(kwords).try_into()?,
-                x2: next_pair!(kwords).try_into()?,
-                y2: next_pair!(kwords).try_into()?,
-                filename: next_pair_str_lit!(kwords),
+                x1: next_pair!(kwords)?.try_into()?,
+                y1: next_pair!(kwords)?.try_into()?,
+                x2: next_pair!(kwords)?.try_into()?,
+                y2: next_pair!(kwords)?.try_into()?,
+                filename: next_pair_str_lit(kwords)?,
             },
             "drawtext" => Command::DrawText {
-                x: next_pair!(kwords).try_into()?,
-                y: next_pair!(kwords).try_into()?,
-                text: next_pair_str_lit!(kwords),
+                x: next_pair!(kwords)?.try_into()?,
+                y: next_pair!(kwords)?.try_into()?,
+                text: next_pair_str_lit(kwords)?,
             },
             "messagebox" => Command::MessageBox {
-                typ: next_pair!(kwords).try_into()?,
-                default_button: next_pair!(kwords).try_into()?,
-                icon: next_pair!(kwords).try_into()?,
-                text: next_pair_str_lit!(kwords),
-                caption: next_pair_str_lit!(kwords),
-                button_pushed: Identifier(next_pair!(kwords).as_str()),
+                typ: next_pair!(kwords)?.try_into()?,
+                default_button: next_pair!(kwords)?.try_into()?,
+                icon: next_pair!(kwords)?.try_into()?,
+                text: next_pair_str_lit(kwords)?,
+                caption: next_pair_str_lit(kwords)?,
+                button_pushed: Identifier(next_pair!(kwords)?.as_str()),
             },
-            "run" => Command::Run(next_pair_str_lit!(kwords)),
+            "run" => Command::Run(next_pair_str_lit(kwords)?),
             "setkeyboard" => {
                 let mut params: Vec<SetKeyboardParam> = Vec::new();
                 while kwords.peek().is_some() {
                     params.push(SetKeyboardParam {
-                        key: next_pair_str_lit!(kwords),
-                        label: next_pair!(kwords).into(),
+                        key: next_pair!(kwords)?.try_into()?,
+                        label: next_pair!(kwords)?.into(),
                     });
                 }
                 Command::SetKeyboard(params)
@@ -322,50 +368,50 @@ impl<'a> Command<'a> {
                 let mut params: Vec<SetMouseParam> = Vec::new();
                 while kwords.peek().is_some() {
                     params.push(SetMouseParam {
-                        x1: next_pair!(kwords).try_into()?,
-                        y1: next_pair!(kwords).try_into()?,
-                        x2: next_pair!(kwords).try_into()?,
-                        y2: next_pair!(kwords).try_into()?,
-                        label: next_pair!(kwords).into(),
-                        x: next_pair!(kwords).into(),
-                        y: next_pair!(kwords).into(),
+                        x1: next_pair!(kwords)?.try_into()?,
+                        y1: next_pair!(kwords)?.try_into()?,
+                        x2: next_pair!(kwords)?.try_into()?,
+                        y2: next_pair!(kwords)?.try_into()?,
+                        label: next_pair!(kwords)?.into(),
+                        x: next_pair!(kwords)?.into(),
+                        y: next_pair!(kwords)?.into(),
                     });
                 }
                 Command::SetMouse(params)
             }
-            "setwaitmode" => Command::SetWaitMode(next_pair!(kwords).try_into()?),
-            "setwindow" => Command::SetWindow(next_pair!(kwords).try_into()?),
+            "setwaitmode" => Command::SetWaitMode(next_pair!(kwords)?.try_into()?),
+            "setwindow" => Command::SetWindow(next_pair!(kwords)?.try_into()?),
             "usebackground" => Command::UseBackground {
-                option: next_pair!(kwords).try_into()?,
-                r: next_pair!(kwords).try_into()?,
-                g: next_pair!(kwords).try_into()?,
-                b: next_pair!(kwords).try_into()?,
+                option: next_pair!(kwords)?.try_into()?,
+                r: next_pair!(kwords)?.try_into()?,
+                g: next_pair!(kwords)?.try_into()?,
+                b: next_pair!(kwords)?.try_into()?,
             },
             "usebrush" => Command::UseBrush {
-                option: next_pair!(kwords).try_into()?,
-                r: next_pair!(kwords).try_into()?,
-                g: next_pair!(kwords).try_into()?,
-                b: next_pair!(kwords).try_into()?,
+                option: next_pair!(kwords)?.try_into()?,
+                r: next_pair!(kwords)?.try_into()?,
+                g: next_pair!(kwords)?.try_into()?,
+                b: next_pair!(kwords)?.try_into()?,
             },
-            "usecaption" => Command::UseCaption(next_pair_str_lit!(kwords)),
-            "usecoordinates" => Command::UseCoordinates(next_pair!(kwords).try_into()?),
+            "usecaption" => Command::UseCaption(next_pair_str_lit(kwords)?),
+            "usecoordinates" => Command::UseCoordinates(next_pair!(kwords)?.try_into()?),
             "usefont" => Command::UseFont {
-                name: next_pair_str_lit!(kwords),
-                width: next_pair!(kwords).try_into()?,
-                height: next_pair!(kwords).try_into()?,
-                bold: next_pair!(kwords).try_into()?,
-                italic: next_pair!(kwords).try_into()?,
-                underline: next_pair!(kwords).try_into()?,
-                r: next_pair!(kwords).try_into()?,
-                g: next_pair!(kwords).try_into()?,
-                b: next_pair!(kwords).try_into()?,
+                name: next_pair_str_lit(kwords)?,
+                width: next_pair!(kwords)?.try_into()?,
+                height: next_pair!(kwords)?.try_into()?,
+                bold: next_pair!(kwords)?.try_into()?,
+                italic: next_pair!(kwords)?.try_into()?,
+                underline: next_pair!(kwords)?.try_into()?,
+                r: next_pair!(kwords)?.try_into()?,
+                g: next_pair!(kwords)?.try_into()?,
+                b: next_pair!(kwords)?.try_into()?,
             },
             "usepen" => Command::UsePen {
-                option: next_pair!(kwords).try_into()?,
-                width: next_pair!(kwords).try_into()?,
-                r: next_pair!(kwords).try_into()?,
-                g: next_pair!(kwords).try_into()?,
-                b: next_pair!(kwords).try_into()?,
+                option: next_pair!(kwords)?.try_into()?,
+                width: next_pair!(kwords)?.try_into()?,
+                r: next_pair!(kwords)?.try_into()?,
+                g: next_pair!(kwords)?.try_into()?,
+                b: next_pair!(kwords)?.try_into()?,
             },
             "waitinput" => Command::WaitInput(if let Some(ref milliseconds) = kwords.next() {
                 Some(milliseconds.try_into()?)
@@ -440,7 +486,7 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
                         prog.commands.push(Command::Set { var, i1, op, i2 });
                     }
                     Rule::label => {
-                        let label = next_pair_unchecked!(command_part.into_inner());
+                        let label = &(command_part.into_inner().next().unwrap());
                         if label.as_span().start_pos().line_col().1 > 1 {
                             println!("{}", label.as_span().start_pos().line_col().1);
                             return Err(Error::LabelIndentationError(label.into(), label.as_str()));
