@@ -102,7 +102,7 @@ pub enum FontUnderline {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum VirtualKey {
-    Backspace,
+    BackSpace,
     Tab,
     NumPad5NoLock,
     Enter,
@@ -147,7 +147,7 @@ impl TryFrom<u16> for VirtualKey {
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         Ok(match value {
-            8 => VirtualKey::Backspace,
+            8 => VirtualKey::BackSpace,
             9 => VirtualKey::Tab,
             12 => VirtualKey::NumPad5NoLock,
             13 => VirtualKey::Enter,

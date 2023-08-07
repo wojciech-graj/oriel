@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::time;
 
 use gtk::cairo;
+use gtk::gdk;
 use gtk::gdk::prelude::*;
 use gtk::gdk_pixbuf;
 use gtk::prelude::*;
@@ -407,7 +408,6 @@ pub struct VMSysGtk {
 }
 
 impl VMSysGtk {
-    //TODO
     pub fn new(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
         gtk::init()?;
 
@@ -461,10 +461,7 @@ impl VMSysGtk {
         let input_ctx = Rc::new(RefCell::new(InputCtx::new()));
 
         let input_ctx_clone = input_ctx.clone();
-        window.connect_key_press_event(move |_, event_key| {
-            let mut input_ctx = input_ctx_clone.borrow_mut();
-            Inhibit(false)
-        });
+        window.connect_key_press_event(move |_, event_key| Inhibit(false));
 
         window.show_all();
 
@@ -1116,4 +1113,179 @@ impl vm::VMSys for VMSysGtk {
         }
         Ok(None)
     }
+}
+
+fn gdk_key_conv(key: gdk::keys::Key) -> Option<(ir::VirtualKey, Option<char>)> {
+    let keys = match key {
+        gdk::keys::constants::BackSpace => Some((ir::VirtualKey::BackSpace, None)),
+        gdk::keys::constants::Tab => Some((ir::VirtualKey::Tab, None)),
+        gdk::keys::constants::Return => Some((ir::VirtualKey::Enter, None)),
+        gdk::keys::constants::Shift_L | gdk::keys::constants::Shift_R => {
+            Some((ir::VirtualKey::Shift, None))
+        }
+        gdk::keys::constants::Control_L | gdk::keys::constants::Control_R => {
+            Some((ir::VirtualKey::Ctrl, None))
+        }
+        gdk::keys::constants::Alt_L | gdk::keys::constants::Alt_R => {
+            Some((ir::VirtualKey::Alt, None))
+        }
+        gdk::keys::constants::Pause => Some((ir::VirtualKey::Pause, None)),
+        gdk::keys::constants::Caps_Lock => Some((ir::VirtualKey::CapsLock, None)),
+        gdk::keys::constants::Escape => Some((ir::VirtualKey::Escape, None)),
+        gdk::keys::constants::space => Some((ir::VirtualKey::Space, Some(' '))),
+        gdk::keys::constants::Page_Up => Some((ir::VirtualKey::PgUp, None)),
+        gdk::keys::constants::Page_Down => Some((ir::VirtualKey::PgDn, None)),
+        gdk::keys::constants::End => Some((ir::VirtualKey::End, None)),
+        gdk::keys::constants::Home => Some((ir::VirtualKey::Home, None)),
+        gdk::keys::constants::Left => Some((ir::VirtualKey::LeftArrow, None)),
+        gdk::keys::constants::Up => Some((ir::VirtualKey::UpArrow, None)),
+        gdk::keys::constants::Right => Some((ir::VirtualKey::RightArrow, None)),
+        gdk::keys::constants::Down => Some((ir::VirtualKey::DownArrow, None)),
+        gdk::keys::constants::_3270_PrintScreen => Some((ir::VirtualKey::PrintScreen, None)),
+        gdk::keys::constants::Insert => Some((ir::VirtualKey::Insert, None)),
+        gdk::keys::constants::Delete => Some((ir::VirtualKey::Delete, None)),
+        gdk::keys::constants::Arabic_0 => Some((ir::VirtualKey::AlNum('0'), Some('0'))),
+        gdk::keys::constants::parenright => Some((ir::VirtualKey::AlNum('0'), Some(')'))),
+        gdk::keys::constants::Arabic_1 => Some((ir::VirtualKey::AlNum('1'), Some('1'))),
+        gdk::keys::constants::exclam => Some((ir::VirtualKey::AlNum('0'), Some('!'))),
+        gdk::keys::constants::Arabic_2 => Some((ir::VirtualKey::AlNum('2'), Some('2'))),
+        gdk::keys::constants::at => Some((ir::VirtualKey::AlNum('0'), Some('@'))),
+        gdk::keys::constants::Arabic_3 => Some((ir::VirtualKey::AlNum('3'), Some('3'))),
+        gdk::keys::constants::numbersign => Some((ir::VirtualKey::AlNum('0'), Some('#'))),
+        gdk::keys::constants::Arabic_4 => Some((ir::VirtualKey::AlNum('4'), Some('4'))),
+        gdk::keys::constants::dollar => Some((ir::VirtualKey::AlNum('0'), Some('$'))),
+        gdk::keys::constants::Arabic_5 => Some((ir::VirtualKey::AlNum('5'), Some('5'))),
+        gdk::keys::constants::percent => Some((ir::VirtualKey::AlNum('0'), Some('%'))),
+        gdk::keys::constants::Arabic_6 => Some((ir::VirtualKey::AlNum('6'), Some('6'))),
+        gdk::keys::constants::asciicircum => Some((ir::VirtualKey::AlNum('0'), Some('^'))),
+        gdk::keys::constants::Arabic_7 => Some((ir::VirtualKey::AlNum('7'), Some('7'))),
+        gdk::keys::constants::ampersand => Some((ir::VirtualKey::AlNum('0'), Some('&'))),
+        gdk::keys::constants::Arabic_8 => Some((ir::VirtualKey::AlNum('8'), Some('8'))),
+        gdk::keys::constants::asterisk => Some((ir::VirtualKey::AlNum('0'), Some('*'))),
+        gdk::keys::constants::Arabic_9 => Some((ir::VirtualKey::AlNum('9'), Some('9'))),
+        gdk::keys::constants::parenleft => Some((ir::VirtualKey::AlNum('0'), Some('('))),
+        gdk::keys::constants::A => Some((ir::VirtualKey::AlNum('A'), Some('A'))),
+        gdk::keys::constants::B => Some((ir::VirtualKey::AlNum('B'), Some('B'))),
+        gdk::keys::constants::C => Some((ir::VirtualKey::AlNum('C'), Some('C'))),
+        gdk::keys::constants::D => Some((ir::VirtualKey::AlNum('D'), Some('D'))),
+        gdk::keys::constants::E => Some((ir::VirtualKey::AlNum('E'), Some('E'))),
+        gdk::keys::constants::F => Some((ir::VirtualKey::AlNum('F'), Some('F'))),
+        gdk::keys::constants::G => Some((ir::VirtualKey::AlNum('G'), Some('G'))),
+        gdk::keys::constants::H => Some((ir::VirtualKey::AlNum('H'), Some('H'))),
+        gdk::keys::constants::I => Some((ir::VirtualKey::AlNum('I'), Some('I'))),
+        gdk::keys::constants::J => Some((ir::VirtualKey::AlNum('J'), Some('J'))),
+        gdk::keys::constants::K => Some((ir::VirtualKey::AlNum('K'), Some('K'))),
+        gdk::keys::constants::L => Some((ir::VirtualKey::AlNum('L'), Some('L'))),
+        gdk::keys::constants::M => Some((ir::VirtualKey::AlNum('M'), Some('M'))),
+        gdk::keys::constants::N => Some((ir::VirtualKey::AlNum('N'), Some('N'))),
+        gdk::keys::constants::O => Some((ir::VirtualKey::AlNum('O'), Some('O'))),
+        gdk::keys::constants::P => Some((ir::VirtualKey::AlNum('P'), Some('P'))),
+        gdk::keys::constants::Q => Some((ir::VirtualKey::AlNum('Q'), Some('Q'))),
+        gdk::keys::constants::R => Some((ir::VirtualKey::AlNum('R'), Some('R'))),
+        gdk::keys::constants::S => Some((ir::VirtualKey::AlNum('S'), Some('S'))),
+        gdk::keys::constants::T => Some((ir::VirtualKey::AlNum('T'), Some('T'))),
+        gdk::keys::constants::U => Some((ir::VirtualKey::AlNum('U'), Some('U'))),
+        gdk::keys::constants::V => Some((ir::VirtualKey::AlNum('V'), Some('V'))),
+        gdk::keys::constants::W => Some((ir::VirtualKey::AlNum('W'), Some('W'))),
+        gdk::keys::constants::X => Some((ir::VirtualKey::AlNum('X'), Some('X'))),
+        gdk::keys::constants::Y => Some((ir::VirtualKey::AlNum('Y'), Some('Y'))),
+        gdk::keys::constants::Z => Some((ir::VirtualKey::AlNum('Z'), Some('Z'))),
+        gdk::keys::constants::a => Some((ir::VirtualKey::AlNum('A'), Some('a'))),
+        gdk::keys::constants::b => Some((ir::VirtualKey::AlNum('B'), Some('b'))),
+        gdk::keys::constants::c => Some((ir::VirtualKey::AlNum('C'), Some('c'))),
+        gdk::keys::constants::d => Some((ir::VirtualKey::AlNum('D'), Some('d'))),
+        gdk::keys::constants::e => Some((ir::VirtualKey::AlNum('E'), Some('e'))),
+        gdk::keys::constants::f => Some((ir::VirtualKey::AlNum('F'), Some('f'))),
+        gdk::keys::constants::g => Some((ir::VirtualKey::AlNum('G'), Some('g'))),
+        gdk::keys::constants::h => Some((ir::VirtualKey::AlNum('H'), Some('h'))),
+        gdk::keys::constants::i => Some((ir::VirtualKey::AlNum('I'), Some('i'))),
+        gdk::keys::constants::j => Some((ir::VirtualKey::AlNum('J'), Some('j'))),
+        gdk::keys::constants::k => Some((ir::VirtualKey::AlNum('K'), Some('k'))),
+        gdk::keys::constants::l => Some((ir::VirtualKey::AlNum('L'), Some('l'))),
+        gdk::keys::constants::m => Some((ir::VirtualKey::AlNum('M'), Some('m'))),
+        gdk::keys::constants::n => Some((ir::VirtualKey::AlNum('N'), Some('n'))),
+        gdk::keys::constants::o => Some((ir::VirtualKey::AlNum('O'), Some('o'))),
+        gdk::keys::constants::p => Some((ir::VirtualKey::AlNum('P'), Some('p'))),
+        gdk::keys::constants::q => Some((ir::VirtualKey::AlNum('Q'), Some('q'))),
+        gdk::keys::constants::r => Some((ir::VirtualKey::AlNum('R'), Some('r'))),
+        gdk::keys::constants::s => Some((ir::VirtualKey::AlNum('S'), Some('s'))),
+        gdk::keys::constants::t => Some((ir::VirtualKey::AlNum('T'), Some('t'))),
+        gdk::keys::constants::u => Some((ir::VirtualKey::AlNum('U'), Some('u'))),
+        gdk::keys::constants::v => Some((ir::VirtualKey::AlNum('V'), Some('v'))),
+        gdk::keys::constants::w => Some((ir::VirtualKey::AlNum('W'), Some('w'))),
+        gdk::keys::constants::x => Some((ir::VirtualKey::AlNum('X'), Some('x'))),
+        gdk::keys::constants::y => Some((ir::VirtualKey::AlNum('Y'), Some('y'))),
+        gdk::keys::constants::z => Some((ir::VirtualKey::AlNum('Z'), Some('z'))),
+        gdk::keys::constants::KP_0 => Some((ir::VirtualKey::NumPad('0'), Some('0'))),
+        gdk::keys::constants::KP_1 => Some((ir::VirtualKey::NumPad('1'), Some('1'))),
+        gdk::keys::constants::KP_2 => Some((ir::VirtualKey::NumPad('2'), Some('2'))),
+        gdk::keys::constants::KP_3 => Some((ir::VirtualKey::NumPad('3'), Some('3'))),
+        gdk::keys::constants::KP_4 => Some((ir::VirtualKey::NumPad('4'), Some('4'))),
+        gdk::keys::constants::KP_5 => Some((ir::VirtualKey::NumPad('5'), Some('5'))),
+        gdk::keys::constants::KP_6 => Some((ir::VirtualKey::NumPad('6'), Some('6'))),
+        gdk::keys::constants::KP_7 => Some((ir::VirtualKey::NumPad('7'), Some('7'))),
+        gdk::keys::constants::KP_8 => Some((ir::VirtualKey::NumPad('8'), Some('8'))),
+        gdk::keys::constants::KP_9 => Some((ir::VirtualKey::NumPad('9'), Some('9'))),
+        gdk::keys::constants::KP_Multiply => Some((ir::VirtualKey::NumPad('*'), Some('*'))),
+        gdk::keys::constants::KP_Add => Some((ir::VirtualKey::NumPad('+'), Some('+'))),
+        gdk::keys::constants::KP_Subtract => Some((ir::VirtualKey::NumPad('-'), Some('-'))),
+        gdk::keys::constants::KP_Decimal => Some((ir::VirtualKey::NumPad('.'), Some('.'))),
+        gdk::keys::constants::KP_Divide => Some((ir::VirtualKey::NumPad('/'), Some('/'))),
+        gdk::keys::constants::F1 => Some((ir::VirtualKey::F(1), None)),
+        gdk::keys::constants::F2 => Some((ir::VirtualKey::F(2), None)),
+        gdk::keys::constants::F3 => Some((ir::VirtualKey::F(3), None)),
+        gdk::keys::constants::F4 => Some((ir::VirtualKey::F(4), None)),
+        gdk::keys::constants::F5 => Some((ir::VirtualKey::F(5), None)),
+        gdk::keys::constants::F6 => Some((ir::VirtualKey::F(6), None)),
+        gdk::keys::constants::F7 => Some((ir::VirtualKey::F(7), None)),
+        gdk::keys::constants::F8 => Some((ir::VirtualKey::F(8), None)),
+        gdk::keys::constants::F9 => Some((ir::VirtualKey::F(9), None)),
+        gdk::keys::constants::F10 => Some((ir::VirtualKey::F(10), None)),
+        gdk::keys::constants::F11 => Some((ir::VirtualKey::F(11), None)),
+        gdk::keys::constants::F12 => Some((ir::VirtualKey::F(12), None)),
+        gdk::keys::constants::F13 => Some((ir::VirtualKey::F(13), None)),
+        gdk::keys::constants::F14 => Some((ir::VirtualKey::F(14), None)),
+        gdk::keys::constants::F15 => Some((ir::VirtualKey::F(15), None)),
+        gdk::keys::constants::F16 => Some((ir::VirtualKey::F(16), None)),
+        gdk::keys::constants::Num_Lock => Some((ir::VirtualKey::NumLock, None)),
+        gdk::keys::constants::Scroll_Lock => Some((ir::VirtualKey::ScrollLock, None)),
+        gdk::keys::constants::colon => Some((ir::VirtualKey::ColonOrSemiColon, Some(':'))),
+        gdk::keys::constants::semicolon => Some((ir::VirtualKey::ColonOrSemiColon, Some(';'))),
+        gdk::keys::constants::plus => Some((ir::VirtualKey::PlusOrEqual, Some('+'))),
+        gdk::keys::constants::equal => Some((ir::VirtualKey::PlusOrEqual, Some('='))),
+        gdk::keys::constants::less => Some((ir::VirtualKey::LessOrComma, Some('<'))),
+        gdk::keys::constants::comma => Some((ir::VirtualKey::LessOrComma, Some(','))),
+        gdk::keys::constants::underscore => Some((ir::VirtualKey::UnderscoreOrHyphen, Some('_'))),
+        gdk::keys::constants::hyphen => Some((ir::VirtualKey::UnderscoreOrHyphen, Some('-'))),
+        gdk::keys::constants::greater => Some((ir::VirtualKey::GreaterOrPeriod, Some('>'))),
+        gdk::keys::constants::period => Some((ir::VirtualKey::GreaterOrPeriod, Some('.'))),
+        gdk::keys::constants::question => Some((ir::VirtualKey::QuestionOrSlash, Some('?'))),
+        gdk::keys::constants::slash => Some((ir::VirtualKey::QuestionOrSlash, Some('/'))),
+        gdk::keys::constants::asciitilde => {
+            Some((ir::VirtualKey::TildeOrBackwardsSingleQuote, Some('~')))
+        }
+        gdk::keys::constants::grave => {
+            Some((ir::VirtualKey::TildeOrBackwardsSingleQuote, Some('`')))
+        }
+        gdk::keys::constants::bracketleft => {
+            Some((ir::VirtualKey::LeftCurlyOrLeftSquare, Some('[')))
+        }
+        gdk::keys::constants::braceleft => Some((ir::VirtualKey::LeftCurlyOrLeftSquare, Some('{'))),
+        gdk::keys::constants::bar => Some((ir::VirtualKey::PipeOrBackslash, Some('|'))),
+        gdk::keys::constants::backslash => Some((ir::VirtualKey::PipeOrBackslash, Some('\\'))),
+        gdk::keys::constants::bracketright => {
+            Some((ir::VirtualKey::RightCurlyOrRightSquare, Some(']')))
+        }
+        gdk::keys::constants::braceright => {
+            Some((ir::VirtualKey::RightCurlyOrRightSquare, Some('}')))
+        }
+        gdk::keys::constants::quotedbl => {
+            Some((ir::VirtualKey::DoubleQuoteOrSingleQuote, Some('"')))
+        }
+        gdk::keys::constants::apostrophe => {
+            Some((ir::VirtualKey::DoubleQuoteOrSingleQuote, Some('\'')))
+        }
+        _ => None,
+    };
+    keys
 }
