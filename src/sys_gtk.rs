@@ -14,8 +14,6 @@ use gtk::prelude::*;
 use crate::ir;
 use crate::vm::*;
 
-//TODO: aliasing?
-
 macro_rules! cairo_context_getter_and_invalidator {
     ($var: ident, $member: ident, $var_inval:ident, $cr: expr) => {
         fn $var(&self) -> Ref<cairo::Context> {
@@ -27,7 +25,9 @@ macro_rules! cairo_context_getter_and_invalidator {
             }
             {
                 let mut borrowed = self.$member.borrow_mut();
-                *borrowed = Some(cairo::Context::new(&self.surface).unwrap());
+                let cr = cairo::Context::new(&self.surface).unwrap();
+                cr.set_antialias(cairo::Antialias::None);
+                *borrowed = Some(cr);
             }
             let borrowed = self.$member.borrow();
             $cr(self, borrowed.as_ref().unwrap());
@@ -41,42 +41,50 @@ macro_rules! cairo_context_getter_and_invalidator {
     };
 }
 
-macro_rules! cairo_new_surface_rgb {
-    ($width:expr, $height:expr, $r:expr, $g:expr, $b:expr) => {{
-        let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, $width, $height).unwrap();
+macro_rules! scale_vars {
+    ($draw_ctx:expr, ($($x:ident),*)) => {
+        $(
+            let $x = $draw_ctx.scaled($x);
+        )*
+    };
+}
+
+mod cairo_util {
+    use super::*;
+
+    pub fn new_surface_rgb(
+        width: i32,
+        height: i32,
+        r: f64,
+        g: f64,
+        b: f64,
+    ) -> (cairo::ImageSurface, cairo::Context) {
+        let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, width, height).unwrap();
         let cr = cairo::Context::new(&surface).unwrap();
-        cr.set_source_rgb($r, $g, $b);
+        cr.set_source_rgb(r, g, b);
         cr.paint().ok();
         (surface, cr)
-    }};
-}
+    }
 
-macro_rules! cairo_pattern_draw_diagonal_up {
-    ($cr:ident) => {{
-        $cr.move_to(0.5, 8.);
-        $cr.line_to(8., 0.5);
-    }};
-}
+    pub fn draw_pattern_diagonal_up(cr: &cairo::Context) {
+        cr.move_to(0.5, 8.);
+        cr.line_to(8., 0.5);
+    }
 
-macro_rules! cairo_pattern_draw_diagonal_down {
-    ($cr:ident) => {{
-        $cr.move_to(0., 0.5);
-        $cr.line_to(7.5, 8.);
-    }};
-}
+    pub fn draw_pattern_diagonal_down(cr: &cairo::Context) {
+        cr.move_to(0., 0.5);
+        cr.line_to(7.5, 8.);
+    }
 
-macro_rules! cairo_pattern_draw_horizontal {
-    ($cr:ident) => {{
-        $cr.move_to(0., 0.);
-        $cr.line_to(8., 0.);
-    }};
-}
+    pub fn draw_pattern_horizontal(cr: &cairo::Context) {
+        cr.move_to(0., 0.);
+        cr.line_to(8., 0.);
+    }
 
-macro_rules! cairo_pattern_draw_vertical {
-    ($cr:ident) => {{
-        $cr.move_to(0., 0.);
-        $cr.line_to(0., 8.);
-    }};
+    pub fn draw_pattern_vertical(cr: &cairo::Context) {
+        cr.move_to(0., 0.);
+        cr.line_to(0., 8.);
+    }
 }
 
 struct DrawCtx {
@@ -188,56 +196,56 @@ impl DrawCtx {
             let (r, g, b) = draw_ctx.brush_rgb;
             let (bkg_r, bkg_g, bkg_b) = draw_ctx.background_rgb;
             let pattern = cairo::SurfacePattern::create(match draw_ctx.brush_type {
-                ir::BrushType::Solid => cairo_new_surface_rgb!(1, 1, r, g, b).0,
+                ir::BrushType::Solid => cairo_util::new_surface_rgb(1, 1, r, g, b).0,
                 ir::BrushType::DiagonalUp => {
-                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
-                    cairo_pattern_draw_diagonal_up!(cr);
+                    cairo_util::draw_pattern_diagonal_up(&cr);
                     cr.rectangle(0., 0., 0.5, 0.5);
                     cr.stroke().ok();
                     surface
                 }
                 ir::BrushType::DiagonalDown => {
-                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
-                    cairo_pattern_draw_diagonal_down!(cr);
+                    cairo_util::draw_pattern_diagonal_down(&cr);
                     cr.rectangle(8., 0., 0.5, 0.5);
                     cr.stroke().ok();
                     surface
                 }
                 ir::BrushType::DiagonalCross => {
-                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
-                    cairo_pattern_draw_diagonal_up!(cr);
-                    cairo_pattern_draw_diagonal_down!(cr);
+                    cairo_util::draw_pattern_diagonal_up(&cr);
+                    cairo_util::draw_pattern_diagonal_down(&cr);
                     cr.stroke().ok();
                     surface
                 }
                 ir::BrushType::Horizontal => {
-                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
-                    cairo_pattern_draw_horizontal!(cr);
+                    cairo_util::draw_pattern_horizontal(&cr);
                     cr.stroke().ok();
                     surface
                 }
                 ir::BrushType::Vertical => {
-                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
-                    cairo_pattern_draw_vertical!(cr);
+                    cairo_util::draw_pattern_vertical(&cr);
                     cr.stroke().ok();
                     surface
                 }
                 ir::BrushType::Cross => {
-                    let (surface, cr) = cairo_new_surface_rgb!(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
-                    cairo_pattern_draw_horizontal!(cr);
-                    cairo_pattern_draw_vertical!(cr);
+                    cairo_util::draw_pattern_horizontal(&cr);
+                    cairo_util::draw_pattern_vertical(&cr);
                     cr.stroke().ok();
                     surface
                 }
@@ -256,12 +264,12 @@ impl DrawCtx {
 
     fn resize(&mut self, width: i32, height: i32) {
         self.surface = {
-            let (surface, cr) = cairo_new_surface_rgb!(
+            let (surface, cr) = cairo_util::new_surface_rgb(
                 width,
                 height,
                 self.background_rgb.0,
                 self.background_rgb.1,
-                self.background_rgb.2
+                self.background_rgb.2,
             );
             cr.set_source_surface(&self.surface, 0., 0.).ok();
             cr.paint().ok();
@@ -352,7 +360,7 @@ impl DrawCtx {
         (startx, starty)
     }
 
-    fn draw(&mut self) {
+    fn draw(&self) {
         self.cr_brush().fill().ok();
         self.cr_background().stroke().ok();
         self.cr_pen().stroke().ok();
@@ -401,11 +409,11 @@ impl VMSysGtk {
         let draw_ctx = { Rc::new(RefCell::new(DrawCtx::new())) };
 
         let draw_ctx_clone = draw_ctx.clone();
-        drawing_area.connect_draw(move |_, ctx| {
+        drawing_area.connect_draw(move |_, cr| {
             let draw_ctx = draw_ctx_clone.borrow();
-            ctx.set_source_surface(draw_ctx.surface.as_ref(), 0., 0.)
+            cr.set_source_surface(draw_ctx.surface.as_ref(), 0., 0.)
                 .ok();
-            ctx.paint().ok();
+            cr.paint().ok();
             Inhibit(false)
         });
 
@@ -462,14 +470,7 @@ impl<'a> VMSys<'a> for VMSysGtk {
     fn draw_arc(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16) {
         let draw_ctx = self.draw_ctx.borrow();
 
-        let x1 = draw_ctx.scaled(x1);
-        let y1 = draw_ctx.scaled(y1);
-        let x2 = draw_ctx.scaled(x2);
-        let y2 = draw_ctx.scaled(y2);
-        let x3 = draw_ctx.scaled(x3);
-        let y3 = draw_ctx.scaled(y3);
-        let x4 = draw_ctx.scaled(x4);
-        let y4 = draw_ctx.scaled(y4);
+        scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
 
         let cx = (x2 + x1) / 2.;
         let cy = (y2 + y1) / 2.;
@@ -490,8 +491,8 @@ impl<'a> VMSys<'a> for VMSysGtk {
 
     fn draw_bitmap(&mut self, x: u16, y: u16, filename: &str) {
         let draw_ctx = self.draw_ctx.borrow();
-        let x = draw_ctx.scaled(x);
-        let y = draw_ctx.scaled(y);
+
+        scale_vars!(draw_ctx, (x, y));
 
         let filename = filename_conv(filename);
 
@@ -516,15 +517,9 @@ impl<'a> VMSys<'a> for VMSysGtk {
         x4: u16,
         y4: u16,
     ) {
-        let mut draw_ctx = self.draw_ctx.borrow_mut();
-        let x1 = draw_ctx.scaled(x1);
-        let y1 = draw_ctx.scaled(y1);
-        let x2 = draw_ctx.scaled(x2);
-        let y2 = draw_ctx.scaled(y2);
-        let x3 = draw_ctx.scaled(x3);
-        let y3 = draw_ctx.scaled(y3);
-        let x4 = draw_ctx.scaled(x4);
-        let y4 = draw_ctx.scaled(y4);
+        let draw_ctx = self.draw_ctx.borrow();
+
+        scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
 
         let cx = (x2 + x1) / 2.;
         let cy = (y2 + y1) / 2.;
@@ -540,11 +535,9 @@ impl<'a> VMSys<'a> for VMSysGtk {
     }
 
     fn draw_ellipse(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) {
-        let mut draw_ctx = self.draw_ctx.borrow_mut();
-        let x1 = draw_ctx.scaled(x1);
-        let y1 = draw_ctx.scaled(y1);
-        let x2 = draw_ctx.scaled(x2);
-        let y2 = draw_ctx.scaled(y2);
+        let draw_ctx = self.draw_ctx.borrow();
+
+        scale_vars!(draw_ctx, (x1, y1, x2, y2));
 
         draw_ctx.arc_path(x1, y1, x2, y2, TAU, 0.0, true, true);
         draw_ctx.draw();
@@ -552,14 +545,60 @@ impl<'a> VMSys<'a> for VMSysGtk {
 
     fn draw_flood(&mut self, x: u16, y: u16, r: u16, g: u16, b: u16) {
         //TODO
+        let draw_ctx = self.draw_ctx.borrow();
+
+        scale_vars!(draw_ctx, (x, y));
+
+        let tgt = [r as u8, g as u8, b as u8];
+
+        let width = draw_ctx.surface.width() as usize;
+        let height = draw_ctx.surface.height() as usize;
+
+        let mut z: Option<cairo::ImageSurface> = None;
+
+        draw_ctx
+            .surface
+            .with_data(|data| {
+                let mut mask: Vec<u8> = (0..(data.len() / 4)).map(|_| 0u8).collect();
+                let mut q: Vec<(usize, usize)> = vec![(x as usize, y as usize)];
+                while let Some((x, y)) = q.pop() {
+                    let i = x + y * width;
+                    if mask[i] == 0 && data[(i * 4)..(i * 4 + 3)] != tgt {
+                        mask[i] = 255;
+                        if x > 0 {
+                            q.push((x - 1, y));
+                        }
+                        if x < width - 1 {
+                            q.push((x + 1, y));
+                        }
+                        if y > 0 {
+                            q.push((x, y - 1));
+                        }
+                        if y < height - 1 {
+                            q.push((x, y + 1));
+                        }
+                    }
+                }
+                z = Some(
+                    cairo::ImageSurface::create_for_data(
+                        mask,
+                        cairo::Format::A8,
+                        width as i32,
+                        height as i32,
+                        width as i32,
+                    )
+                    .unwrap(),
+                );
+            })
+            .ok();
+
+        draw_ctx.cr_brush().mask_surface(&z.unwrap(), 0., 0.).ok();
     }
 
     fn draw_line(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) {
         let draw_ctx = self.draw_ctx.borrow();
-        let x1 = draw_ctx.scaled(x1);
-        let y1 = draw_ctx.scaled(y1);
-        let x2 = draw_ctx.scaled(x2);
-        let y2 = draw_ctx.scaled(y2);
+
+        scale_vars!(draw_ctx, (x1, y1, x2, y2));
 
         draw_ctx.line_exec(false, |ctx| {
             ctx.move_to(x1, y1);
@@ -575,15 +614,9 @@ impl<'a> VMSys<'a> for VMSysGtk {
     }
 
     fn draw_pie(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16) {
-        let mut draw_ctx = self.draw_ctx.borrow_mut();
-        let x1 = draw_ctx.scaled(x1);
-        let y1 = draw_ctx.scaled(y1);
-        let x2 = draw_ctx.scaled(x2);
-        let y2 = draw_ctx.scaled(y2);
-        let x3 = draw_ctx.scaled(x3);
-        let y3 = draw_ctx.scaled(y3);
-        let x4 = draw_ctx.scaled(x4);
-        let y4 = draw_ctx.scaled(y4);
+        let draw_ctx = self.draw_ctx.borrow();
+
+        scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
 
         let cx = (x2 + x1) / 2.;
         let cy = (y2 + y1) / 2.;
@@ -599,11 +632,9 @@ impl<'a> VMSys<'a> for VMSysGtk {
     }
 
     fn draw_rectangle(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) {
-        let mut draw_ctx = self.draw_ctx.borrow_mut();
-        let x1 = draw_ctx.scaled(x1);
-        let y1 = draw_ctx.scaled(y1);
-        let x2 = draw_ctx.scaled(x2);
-        let y2 = draw_ctx.scaled(y2);
+        let draw_ctx = self.draw_ctx.borrow();
+
+        scale_vars!(draw_ctx, (x1, y1, x2, y2));
 
         draw_ctx.line_exec(true, |ctx| {
             ctx.move_to(x1, y1);
@@ -616,13 +647,9 @@ impl<'a> VMSys<'a> for VMSysGtk {
     }
 
     fn draw_round_rectangle(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16) {
-        let mut draw_ctx = self.draw_ctx.borrow_mut();
-        let x1 = draw_ctx.scaled(x1);
-        let y1 = draw_ctx.scaled(y1);
-        let x2 = draw_ctx.scaled(x2);
-        let y2 = draw_ctx.scaled(y2);
-        let x3 = draw_ctx.scaled(x3);
-        let y3 = draw_ctx.scaled(y3);
+        let draw_ctx = self.draw_ctx.borrow();
+
+        scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3));
 
         draw_ctx.arc_path(x1, y1, x1 + x3, y1 + y3, PI * 1.5, PI, false, true);
         draw_ctx.line_exec(true, |ctx| {
@@ -646,10 +673,8 @@ impl<'a> VMSys<'a> for VMSysGtk {
 
     fn draw_sized_bitmap(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, filename: &str) {
         let draw_ctx = self.draw_ctx.borrow();
-        let x1 = draw_ctx.scaled(x1);
-        let y1 = draw_ctx.scaled(y1);
-        let x2 = draw_ctx.scaled(x2);
-        let y2 = draw_ctx.scaled(y2);
+
+        scale_vars!(draw_ctx, (x1, y1, x2, y2));
         let filename = filename_conv(filename);
 
         let pixbuf = gdk_pixbuf::Pixbuf::from_file_at_size(
@@ -685,8 +710,8 @@ impl<'a> VMSys<'a> for VMSysGtk {
 
     fn draw_text(&mut self, x: u16, y: u16, text: &str) {
         let draw_ctx = self.draw_ctx.borrow();
-        let x = draw_ctx.scaled(x);
-        let y = draw_ctx.scaled(y);
+
+        scale_vars!(draw_ctx, (x, y));
 
         if let ir::BackgroundTransparency::Opaque = draw_ctx.background_transparency {
             let text_extents = draw_ctx.cr_text().text_extents(text).unwrap();
