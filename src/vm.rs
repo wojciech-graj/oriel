@@ -44,10 +44,25 @@ impl<'a> From<ir::Identifier<'a>> for OwnedIdentifier {
 }
 
 pub trait VMSys {
-    fn beep(&mut self);
-    fn draw_arc(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16);
-    fn draw_background(&mut self);
-    fn draw_bitmap(&mut self, x: u16, y: u16, filename: &str);
+    fn beep(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_arc(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+        x3: u16,
+        y3: u16,
+        x4: u16,
+        y4: u16,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_background(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_bitmap(
+        &mut self,
+        x: u16,
+        y: u16,
+        filename: &str,
+    ) -> Result<(), Box<dyn std::error::Error>>;
     fn draw_chord(
         &mut self,
         x1: u16,
@@ -58,16 +73,66 @@ pub trait VMSys {
         y3: u16,
         x4: u16,
         y4: u16,
-    );
-    fn draw_ellipse(&mut self, x1: u16, y1: u16, x2: u16, y2: u16);
-    fn draw_flood(&mut self, x: u16, y: u16, r: u16, g: u16, b: u16);
-    fn draw_line(&mut self, x1: u16, y1: u16, x2: u16, y2: u16);
-    fn draw_number(&mut self, x: u16, y: u16, n: u16);
-    fn draw_pie(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16);
-    fn draw_rectangle(&mut self, x1: u16, y1: u16, x2: u16, y2: u16);
-    fn draw_round_rectangle(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16);
-    fn draw_sized_bitmap(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, filename: &str);
-    fn draw_text(&mut self, x: u16, y: u16, text: &str);
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_ellipse(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_flood(
+        &mut self,
+        x: u16,
+        y: u16,
+        r: u16,
+        g: u16,
+        b: u16,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_line(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_number(&mut self, x: u16, y: u16, n: u16) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_pie(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+        x3: u16,
+        y3: u16,
+        x4: u16,
+        y4: u16,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_rectangle(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_round_rectangle(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+        x3: u16,
+        y3: u16,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_sized_bitmap(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+        filename: &str,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn draw_text(&mut self, x: u16, y: u16, text: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn message_box(
         &mut self,
         typ: ir::MessageBoxType,
@@ -75,17 +140,36 @@ pub trait VMSys {
         icon: ir::MessageBoxIcon,
         text: &str,
         caption: &str,
-    ) -> u16;
-    fn run(&mut self, command: &str);
-    fn set_keyboard(&mut self, params: Option<HashMap<Key, OwnedIdentifier>>);
-    fn set_menu(&mut self);
-    fn set_mouse(&mut self); // TODO
-    fn set_wait_mode(&mut self, mode: ir::WaitMode);
-    fn set_window(&mut self, option: ir::SetWindowOption);
-    fn use_background(&mut self, option: ir::BackgroundTransparency, r: u16, g: u16, b: u16);
-    fn use_brush(&mut self, option: ir::BrushType, r: u16, g: u16, b: u16);
-    fn use_caption(&mut self, text: &str);
-    fn use_coordinates(&mut self, option: ir::Coordinates);
+    ) -> Result<u16, Box<dyn std::error::Error>>;
+    fn run(&mut self, command: &str) -> Result<(), Box<dyn std::error::Error>>;
+    fn set_keyboard(
+        &mut self,
+        params: Option<HashMap<Key, OwnedIdentifier>>,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn set_menu(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    fn set_mouse(&mut self) -> Result<(), Box<dyn std::error::Error>>; // TODO
+    fn set_wait_mode(&mut self, mode: ir::WaitMode) -> Result<(), Box<dyn std::error::Error>>;
+    fn set_window(&mut self, option: ir::SetWindowOption)
+        -> Result<(), Box<dyn std::error::Error>>;
+    fn use_background(
+        &mut self,
+        option: ir::BackgroundTransparency,
+        r: u16,
+        g: u16,
+        b: u16,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn use_brush(
+        &mut self,
+        option: ir::BrushType,
+        r: u16,
+        g: u16,
+        b: u16,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn use_caption(&mut self, text: &str) -> Result<(), Box<dyn std::error::Error>>;
+    fn use_coordinates(
+        &mut self,
+        option: ir::Coordinates,
+    ) -> Result<(), Box<dyn std::error::Error>>;
     fn use_font(
         &mut self,
         name: &str,
@@ -97,9 +181,19 @@ pub trait VMSys {
         r: u16,
         g: u16,
         b: u16,
-    );
-    fn use_pen(&mut self, option: ir::PenType, width: u16, r: u16, g: u16, b: u16);
-    fn wait_input(&mut self, milliseconds: Option<u16>);
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn use_pen(
+        &mut self,
+        option: ir::PenType,
+        width: u16,
+        r: u16,
+        g: u16,
+        b: u16,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn wait_input(
+        &mut self,
+        milliseconds: Option<u16>,
+    ) -> Result<Option<OwnedIdentifier>, Box<dyn std::error::Error>>;
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -113,6 +207,8 @@ pub enum Error<'a> {
     MathOperationError,
     #[error("Invalid Virtual Key")]
     InvalidVirtualKeyError,
+    #[error("System Error")]
+    SystemError(#[from] Box<dyn std::error::Error>),
 }
 
 pub struct VM<'a> {
@@ -166,7 +262,7 @@ impl<'a> VM<'a> {
     pub fn step(&mut self) -> Result<bool, Error<'a>> {
         let cmd = &self.program.commands[self.ip];
         match *cmd {
-            ir::Command::Beep => incr_ip!(self, self.ctx.beep()),
+            ir::Command::Beep => incr_ip!(self, self.ctx.beep()?),
             ir::Command::DrawArc {
                 x1,
                 y1,
@@ -187,13 +283,16 @@ impl<'a> VM<'a> {
                     integer_value!(self, y3)?,
                     integer_value!(self, x4)?,
                     integer_value!(self, y4)?,
-                )
+                )?
             ),
-            ir::Command::DrawBackground => incr_ip!(self, self.ctx.draw_background()),
+            ir::Command::DrawBackground => incr_ip!(self, self.ctx.draw_background()?),
             ir::Command::DrawBitmap { x, y, filename } => incr_ip!(
                 self,
-                self.ctx
-                    .draw_bitmap(integer_value!(self, x)?, integer_value!(self, y)?, filename)
+                self.ctx.draw_bitmap(
+                    integer_value!(self, x)?,
+                    integer_value!(self, y)?,
+                    filename
+                )?
             ),
             ir::Command::DrawChord {
                 x1,
@@ -215,7 +314,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, y3)?,
                     integer_value!(self, x4)?,
                     integer_value!(self, y4)?,
-                )
+                )?
             ),
             ir::Command::DrawEllipse { x1, y1, x2, y2 } => incr_ip!(
                 self,
@@ -224,7 +323,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, y1)?,
                     integer_value!(self, x2)?,
                     integer_value!(self, y2)?,
-                )
+                )?
             ),
             ir::Command::DrawFlood { x, y, r, g, b } => incr_ip!(
                 self,
@@ -234,7 +333,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, r)?,
                     integer_value!(self, g)?,
                     integer_value!(self, b)?,
-                )
+                )?
             ),
             ir::Command::DrawLine { x1, y1, x2, y2 } => incr_ip!(
                 self,
@@ -243,7 +342,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, y1)?,
                     integer_value!(self, x2)?,
                     integer_value!(self, y2)?,
-                )
+                )?
             ),
             ir::Command::DrawNumber { x, y, n } => incr_ip!(
                 self,
@@ -251,7 +350,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, x)?,
                     integer_value!(self, y)?,
                     integer_value!(self, n)?,
-                )
+                )?
             ),
             ir::Command::DrawPie {
                 x1,
@@ -273,7 +372,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, y3)?,
                     integer_value!(self, x4)?,
                     integer_value!(self, y4)?,
-                )
+                )?
             ),
             ir::Command::DrawRectangle { x1, y1, x2, y2 } => incr_ip!(
                 self,
@@ -282,7 +381,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, y1)?,
                     integer_value!(self, x2)?,
                     integer_value!(self, y2)?,
-                )
+                )?
             ),
             ir::Command::DrawRoundRectangle {
                 x1,
@@ -300,7 +399,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, y2)?,
                     integer_value!(self, x3)?,
                     integer_value!(self, y3)?,
-                )
+                )?
             ),
             ir::Command::DrawSizedBitmap {
                 x1,
@@ -316,12 +415,12 @@ impl<'a> VM<'a> {
                     integer_value!(self, x2)?,
                     integer_value!(self, y2)?,
                     filename,
-                )
+                )?
             ),
             ir::Command::DrawText { x, y, text } => incr_ip!(
                 self,
                 self.ctx
-                    .draw_text(integer_value!(self, x)?, integer_value!(self, y)?, text)
+                    .draw_text(integer_value!(self, x)?, integer_value!(self, y)?, text)?
             ),
             ir::Command::End => return Ok(false),
             ir::Command::Gosub(ref ident) => {
@@ -361,10 +460,10 @@ impl<'a> VM<'a> {
                     icon,
                     text,
                     caption,
-                );
+                )?;
                 incr_ip!(self, self.set_variable(button_pushed, button_pushed_val));
             }
-            ir::Command::Run(command) => incr_ip!(self, self.ctx.run(command)),
+            ir::Command::Run(command) => incr_ip!(self, self.ctx.run(command)?),
             ir::Command::Set { var, i1, op, i2 } => incr_ip!(
                 self,
                 self.set_variable(
@@ -394,15 +493,15 @@ impl<'a> VM<'a> {
                                         label.into(),
                                     ))
                                 })
-                                .collect::<Result<HashMap<_, _>, _>>()
+                                .collect::<Result<HashMap<_, _>, Error>>()
                         })
                         .transpose()?
-                )
+                )?
             ),
             ir::Command::SetMenu(_) => {}  //TODO
             ir::Command::SetMouse(_) => {} //TODO
-            ir::Command::SetWaitMode(mode) => incr_ip!(self, self.ctx.set_wait_mode(mode)),
-            ir::Command::SetWindow(option) => incr_ip!(self, self.ctx.set_window(option)),
+            ir::Command::SetWaitMode(mode) => incr_ip!(self, self.ctx.set_wait_mode(mode)?),
+            ir::Command::SetWindow(option) => incr_ip!(self, self.ctx.set_window(option)?),
             ir::Command::UseBackground { option, r, g, b } => incr_ip!(
                 self,
                 self.ctx.use_background(
@@ -410,7 +509,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, r)?,
                     integer_value!(self, g)?,
                     integer_value!(self, b)?,
-                )
+                )?
             ),
             ir::Command::UseBrush { option, r, g, b } => incr_ip!(
                 self,
@@ -419,11 +518,11 @@ impl<'a> VM<'a> {
                     integer_value!(self, r)?,
                     integer_value!(self, g)?,
                     integer_value!(self, b)?,
-                )
+                )?
             ),
-            ir::Command::UseCaption(text) => incr_ip!(self, self.ctx.use_caption(text)),
+            ir::Command::UseCaption(text) => incr_ip!(self, self.ctx.use_caption(text)?),
             ir::Command::UseCoordinates(coordinates) => {
-                incr_ip!(self, self.ctx.use_coordinates(coordinates))
+                incr_ip!(self, self.ctx.use_coordinates(coordinates)?)
             }
             ir::Command::UseFont {
                 name,
@@ -447,7 +546,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, r)?,
                     integer_value!(self, g)?,
                     integer_value!(self, b)?,
-                )
+                )?
             ),
             ir::Command::UsePen {
                 option,
@@ -463,7 +562,7 @@ impl<'a> VM<'a> {
                     integer_value!(self, r)?,
                     integer_value!(self, g)?,
                     integer_value!(self, b)?,
-                )
+                )?
             ),
             ir::Command::WaitInput(milliseconds) => incr_ip!(
                 self,
@@ -471,7 +570,7 @@ impl<'a> VM<'a> {
                     Some(integer_value!(self, i)?)
                 } else {
                     None
-                })
+                })?
             ),
         };
         Ok(true)

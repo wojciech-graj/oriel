@@ -11,6 +11,7 @@ use gtk::cairo;
 use gtk::gdk::prelude::*;
 use gtk::gdk_pixbuf;
 use gtk::prelude::*;
+use thiserror::Error;
 
 use crate::ir;
 use crate::vm;
@@ -60,12 +61,12 @@ mod cairo_util {
         r: f64,
         g: f64,
         b: f64,
-    ) -> (cairo::ImageSurface, cairo::Context) {
-        let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, width, height).unwrap();
-        let cr = cairo::Context::new(&surface).unwrap();
+    ) -> Result<(cairo::ImageSurface, cairo::Context), cairo::Error> {
+        let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, width, height)?;
+        let cr = cairo::Context::new(&surface)?;
         cr.set_source_rgb(r, g, b);
-        cr.paint().ok();
-        (surface, cr)
+        cr.paint()?;
+        Ok((surface, cr))
     }
 
     pub fn draw_pattern_diagonal_up(cr: &cairo::Context) {
@@ -115,17 +116,17 @@ struct DrawCtx {
 }
 
 impl DrawCtx {
-    fn new() -> Self {
-        DrawCtx {
-            surface: cairo::ImageSurface::create(cairo::Format::ARgb32, 0, 0).unwrap(),
+    fn new() -> Result<Self, cairo::Error> {
+        Ok(DrawCtx {
+            surface: cairo::ImageSurface::create(cairo::Format::ARgb32, 0, 0)?,
             cr_text_: RefCell::new(None),
             cr_pen_: RefCell::new(None),
             cr_background_: RefCell::new(None),
             cr_brush_: RefCell::new(None),
 
             text_face: {
-                let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, 0, 0).unwrap();
-                let cr = cairo::Context::new(&surface).unwrap();
+                let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, 0, 0)?;
+                let cr = cairo::Context::new(&surface)?;
                 cr.font_face()
             },
             text_matrix: cairo::Matrix::identity(),
@@ -143,7 +144,7 @@ impl DrawCtx {
             brush_rgb: (0., 0., 0.),
 
             scale: 1.,
-        }
+        })
     }
 
     cairo_context_getter_and_invalidator!(
@@ -198,9 +199,10 @@ impl DrawCtx {
             let (r, g, b) = draw_ctx.brush_rgb;
             let (bkg_r, bkg_g, bkg_b) = draw_ctx.background_rgb;
             let pattern = cairo::SurfacePattern::create(match draw_ctx.brush_type {
-                ir::BrushType::Solid => cairo_util::new_surface_rgb(1, 1, r, g, b).0,
+                ir::BrushType::Solid => cairo_util::new_surface_rgb(1, 1, r, g, b).unwrap().0,
                 ir::BrushType::DiagonalUp => {
-                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) =
+                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_diagonal_up(&cr);
@@ -209,7 +211,8 @@ impl DrawCtx {
                     surface
                 }
                 ir::BrushType::DiagonalDown => {
-                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) =
+                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_diagonal_down(&cr);
@@ -218,7 +221,8 @@ impl DrawCtx {
                     surface
                 }
                 ir::BrushType::DiagonalCross => {
-                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) =
+                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_diagonal_up(&cr);
@@ -227,7 +231,8 @@ impl DrawCtx {
                     surface
                 }
                 ir::BrushType::Horizontal => {
-                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) =
+                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_horizontal(&cr);
@@ -235,7 +240,8 @@ impl DrawCtx {
                     surface
                 }
                 ir::BrushType::Vertical => {
-                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) =
+                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_vertical(&cr);
@@ -243,7 +249,8 @@ impl DrawCtx {
                     surface
                 }
                 ir::BrushType::Cross => {
-                    let (surface, cr) = cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b);
+                    let (surface, cr) =
+                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_horizontal(&cr);
@@ -264,7 +271,7 @@ impl DrawCtx {
         }
     );
 
-    fn resize(&mut self, width: i32, height: i32) {
+    fn resize(&mut self, width: i32, height: i32) -> Result<(), cairo::Error> {
         self.surface = {
             let (surface, cr) = cairo_util::new_surface_rgb(
                 width,
@@ -272,15 +279,16 @@ impl DrawCtx {
                 self.background_rgb.0,
                 self.background_rgb.1,
                 self.background_rgb.2,
-            );
-            cr.set_source_surface(&self.surface, 0., 0.).ok();
-            cr.paint().ok();
+            )?;
+            cr.set_source_surface(&self.surface, 0., 0.)?;
+            cr.paint()?;
             surface
         };
         *self.cr_text_.borrow_mut() = None;
         *self.cr_pen_.borrow_mut() = None;
         *self.cr_background_.borrow_mut() = None;
         *self.cr_brush_.borrow_mut() = None;
+        Ok(())
     }
 
     fn scaled(&self, x: u16) -> f64 {
@@ -362,10 +370,17 @@ impl DrawCtx {
         (startx, starty)
     }
 
-    fn draw(&self) {
-        self.cr_brush().fill().ok();
-        self.cr_background().stroke().ok();
-        self.cr_pen().stroke().ok();
+    fn draw(&self) -> Result<(), cairo::Error> {
+        self.cr_brush().fill()?;
+        self.cr_background().stroke()?;
+        self.cr_pen().stroke()?;
+        Ok(())
+    }
+
+    fn stroke(&self) -> Result<(), cairo::Error> {
+        self.cr_background().stroke()?;
+        self.cr_pen().stroke()?;
+        Ok(())
     }
 }
 
@@ -392,8 +407,9 @@ pub struct VMSysGtk {
 }
 
 impl VMSysGtk {
-    pub fn new(filename: &str) -> Self {
-        gtk::init().expect("Failed to initialize GTK.");
+    //TODO
+    pub fn new(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        gtk::init()?;
 
         let window = gtk::Window::new(gtk::WindowType::Toplevel);
         window.set_default_size(640, 480);
@@ -423,7 +439,7 @@ impl VMSysGtk {
         let drawing_area = gtk::DrawingArea::new();
         mainbox.pack_start(&drawing_area, true, true, 0);
 
-        let draw_ctx = Rc::new(RefCell::new(DrawCtx::new()));
+        let draw_ctx = Rc::new(RefCell::new(DrawCtx::new()?));
 
         let draw_ctx_clone = draw_ctx.clone();
         drawing_area.connect_draw(move |_, cr| {
@@ -438,7 +454,8 @@ impl VMSysGtk {
         drawing_area.connect_size_allocate(move |_, rect| {
             draw_ctx_clone
                 .borrow_mut()
-                .resize(rect.width(), rect.height());
+                .resize(rect.width(), rect.height())
+                .ok();
         });
 
         let input_ctx = Rc::new(RefCell::new(InputCtx::new()));
@@ -459,9 +476,9 @@ impl VMSysGtk {
             wait_mode: ir::WaitMode::Null,
         };
 
-        sys.use_coordinates(ir::Coordinates::Metric);
+        sys.use_coordinates(ir::Coordinates::Metric)?;
 
-        sys
+        Ok(sys)
     }
 }
 
@@ -488,12 +505,37 @@ fn command_conv(command: &str) -> &str {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
+#[derive(Error, Debug)]
+enum Error {
+    #[error("Failed to get window")]
+    WindowMissingError,
+    #[error("Failed to create cairo surface")]
+    SurfaceCreateError,
+    #[error("Failed to get monitor")]
+    MonitorMissingError,
+}
+
 impl vm::VMSys for VMSysGtk {
-    fn beep(&mut self) {
-        self.window.window().unwrap().beep();
+    fn beep(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.window
+            .window()
+            .ok_or_else(|| Error::WindowMissingError)?
+            .beep();
+        Ok(())
     }
 
-    fn draw_arc(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16) {
+    fn draw_arc(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+        x3: u16,
+        y3: u16,
+        x4: u16,
+        y4: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
@@ -504,32 +546,38 @@ impl vm::VMSys for VMSysGtk {
         let theta2 = (y4 - cy).atan2(x4 - cx);
 
         draw_ctx.arc_path(x1, y1, x2, y2, theta1, theta2, true, false);
-        draw_ctx.line_exec(false, |ctx| {
-            ctx.stroke().ok();
-        });
+        draw_ctx.stroke()?;
+        Ok(())
     }
 
-    fn draw_background(&mut self) {
+    fn draw_background(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
-        draw_ctx.cr_background().paint().ok();
+        draw_ctx.cr_background().paint()?;
+        Ok(())
     }
 
-    fn draw_bitmap(&mut self, x: u16, y: u16, filename: &str) {
+    fn draw_bitmap(
+        &mut self,
+        x: u16,
+        y: u16,
+        filename: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x, y));
 
         let filename = filename_conv(filename);
 
-        let pixbuf = gdk_pixbuf::Pixbuf::from_file(filename).unwrap();
+        let pixbuf = gdk_pixbuf::Pixbuf::from_file(filename)?;
         let surface = pixbuf
             .create_surface(1, self.window.window().as_ref())
-            .unwrap();
+            .ok_or_else(|| Error::SurfaceCreateError)?;
 
-        let cr = cairo::Context::new(draw_ctx.surface.as_ref()).unwrap();
-        cr.set_source_surface(&surface, x, y).ok();
-        cr.paint().ok();
+        let cr = cairo::Context::new(draw_ctx.surface.as_ref())?;
+        cr.set_source_surface(&surface, x, y)?;
+        cr.paint()?;
+        Ok(())
     }
 
     fn draw_chord(
@@ -542,7 +590,7 @@ impl vm::VMSys for VMSysGtk {
         y3: u16,
         x4: u16,
         y4: u16,
-    ) {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
@@ -557,20 +605,34 @@ impl vm::VMSys for VMSysGtk {
             ctx.line_to(pts.0, pts.1);
         });
 
-        draw_ctx.draw();
+        draw_ctx.draw()?;
+        Ok(())
     }
 
-    fn draw_ellipse(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) {
+    fn draw_ellipse(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2));
 
         draw_ctx.arc_path(x1, y1, x2, y2, TAU, 0.0, true, true);
-        draw_ctx.draw();
+        draw_ctx.draw()?;
+        Ok(())
     }
 
-    fn draw_flood(&mut self, x: u16, y: u16, r: u16, g: u16, b: u16) {
-        //TODO
+    fn draw_flood(
+        &mut self,
+        x: u16,
+        y: u16,
+        r: u16,
+        g: u16,
+        b: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x, y));
@@ -580,48 +642,51 @@ impl vm::VMSys for VMSysGtk {
         let width = draw_ctx.surface.width() as usize;
         let height = draw_ctx.surface.height() as usize;
 
-        let mut z: Option<cairo::ImageSurface> = None;
+        let mut mask_surface: Option<Result<cairo::ImageSurface, cairo::Error>> = None;
 
-        draw_ctx
-            .surface
-            .with_data(|data| {
-                let mut mask: Vec<u8> = (0..(data.len() / 4)).map(|_| 0u8).collect();
-                let mut q: Vec<(usize, usize)> = vec![(x as usize, y as usize)];
-                while let Some((x, y)) = q.pop() {
-                    let i = x + y * width;
-                    if mask[i] == 0 && data[(i * 4)..(i * 4 + 3)] != tgt {
-                        mask[i] = 255;
-                        if x > 0 {
-                            q.push((x - 1, y));
-                        }
-                        if x < width - 1 {
-                            q.push((x + 1, y));
-                        }
-                        if y > 0 {
-                            q.push((x, y - 1));
-                        }
-                        if y < height - 1 {
-                            q.push((x, y + 1));
-                        }
+        draw_ctx.surface.with_data(|data| {
+            let mut mask: Vec<u8> = (0..(data.len() / 4)).map(|_| 0u8).collect();
+            let mut q: Vec<(usize, usize)> = vec![(x as usize, y as usize)];
+            while let Some((x, y)) = q.pop() {
+                let i = x + y * width;
+                if mask[i] == 0 && data[(i * 4)..(i * 4 + 3)] != tgt {
+                    mask[i] = 255;
+                    if x > 0 {
+                        q.push((x - 1, y));
+                    }
+                    if x < width - 1 {
+                        q.push((x + 1, y));
+                    }
+                    if y > 0 {
+                        q.push((x, y - 1));
+                    }
+                    if y < height - 1 {
+                        q.push((x, y + 1));
                     }
                 }
-                z = Some(
-                    cairo::ImageSurface::create_for_data(
-                        mask,
-                        cairo::Format::A8,
-                        width as i32,
-                        height as i32,
-                        width as i32,
-                    )
-                    .unwrap(),
-                );
-            })
-            .ok();
+            }
+            mask_surface = Some(cairo::ImageSurface::create_for_data(
+                mask,
+                cairo::Format::A8,
+                width as i32,
+                height as i32,
+                width as i32,
+            ));
+        })?;
 
-        draw_ctx.cr_brush().mask_surface(&z.unwrap(), 0., 0.).ok();
+        let mask_surface = mask_surface.unwrap()?;
+
+        draw_ctx.cr_brush().mask_surface(&mask_surface, 0., 0.)?;
+        Ok(())
     }
 
-    fn draw_line(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) {
+    fn draw_line(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2));
@@ -630,16 +695,25 @@ impl vm::VMSys for VMSysGtk {
             ctx.move_to(x1, y1);
             ctx.line_to(x2, y2);
         });
-        draw_ctx.line_exec(false, |ctx| {
-            ctx.stroke().ok();
-        });
+        draw_ctx.stroke()?;
+        Ok(())
     }
 
-    fn draw_number(&mut self, x: u16, y: u16, n: u16) {
-        self.draw_text(x, y, n.to_string().as_str());
+    fn draw_number(&mut self, x: u16, y: u16, n: u16) -> Result<(), Box<dyn std::error::Error>> {
+        self.draw_text(x, y, n.to_string().as_str())
     }
 
-    fn draw_pie(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16, x4: u16, y4: u16) {
+    fn draw_pie(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+        x3: u16,
+        y3: u16,
+        x4: u16,
+        y4: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
@@ -654,10 +728,17 @@ impl vm::VMSys for VMSysGtk {
             ctx.line_to(cx, cy);
             ctx.line_to(pts.0, pts.1);
         });
-        draw_ctx.draw();
+        draw_ctx.draw()?;
+        Ok(())
     }
 
-    fn draw_rectangle(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) {
+    fn draw_rectangle(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2));
@@ -669,10 +750,19 @@ impl vm::VMSys for VMSysGtk {
             ctx.line_to(x1, y2);
             ctx.line_to(x1, y1);
         });
-        draw_ctx.draw();
+        draw_ctx.draw()?;
+        Ok(())
     }
 
-    fn draw_round_rectangle(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, x3: u16, y3: u16) {
+    fn draw_round_rectangle(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+        x3: u16,
+        y3: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3));
@@ -694,10 +784,18 @@ impl vm::VMSys for VMSysGtk {
             ctx.line_to(x1 + x3 / 2., y1);
         });
 
-        draw_ctx.draw();
+        draw_ctx.draw()?;
+        Ok(())
     }
 
-    fn draw_sized_bitmap(&mut self, x1: u16, y1: u16, x2: u16, y2: u16, filename: &str) {
+    fn draw_sized_bitmap(
+        &mut self,
+        x1: u16,
+        y1: u16,
+        x2: u16,
+        y2: u16,
+        filename: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2));
@@ -707,13 +805,12 @@ impl vm::VMSys for VMSysGtk {
             filename,
             (x1 - x2).abs() as i32,
             (y1 - y2).abs() as i32,
-        )
-        .unwrap();
+        )?;
         let surface = pixbuf
             .create_surface(1, self.window.window().as_ref())
-            .unwrap();
+            .ok_or_else(|| Error::SurfaceCreateError)?;
 
-        let cr = cairo::Context::new(draw_ctx.surface.as_ref()).unwrap();
+        let cr = cairo::Context::new(draw_ctx.surface.as_ref())?;
         cr.scale(
             if x1 < x2 { 1. } else { -1. },
             if y1 < y2 { 1. } else { -1. },
@@ -730,29 +827,31 @@ impl vm::VMSys for VMSysGtk {
                 (-pixbuf.height()).into()
             },
         );
-        cr.set_source_surface(&surface, x1.min(x2), y1.min(y2)).ok();
-        cr.paint().ok();
+        cr.set_source_surface(&surface, x1.min(x2), y1.min(y2))?;
+        cr.paint()?;
+        Ok(())
     }
 
-    fn draw_text(&mut self, x: u16, y: u16, text: &str) {
+    fn draw_text(&mut self, x: u16, y: u16, text: &str) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x, y));
 
         if let ir::BackgroundTransparency::Opaque = draw_ctx.background_transparency {
-            let text_extents = draw_ctx.cr_text().text_extents(text).unwrap();
-            let font_extents = draw_ctx.cr_text().font_extents().unwrap();
+            let text_extents = draw_ctx.cr_text().text_extents(text)?;
+            let font_extents = draw_ctx.cr_text().font_extents()?;
             draw_ctx.cr_background().rectangle(
                 x,
                 y - font_extents.ascent(),
                 text_extents.width(),
                 font_extents.height(),
             );
-            draw_ctx.cr_background().fill().ok();
+            draw_ctx.cr_background().fill()?;
         }
 
         draw_ctx.cr_text().move_to(x, y);
-        draw_ctx.cr_text().show_text(text).ok();
+        draw_ctx.cr_text().show_text(text)?;
+        Ok(())
     }
 
     fn message_box(
@@ -762,7 +861,7 @@ impl vm::VMSys for VMSysGtk {
         icon: crate::ir::MessageBoxIcon,
         text: &str,
         caption: &str,
-    ) -> u16 {
+    ) -> Result<u16, Box<dyn std::error::Error>> {
         let dialog = gtk::MessageDialog::new(
             Some(&self.window),
             gtk::DialogFlags::DESTROY_WITH_PARENT,
@@ -800,36 +899,48 @@ impl vm::VMSys for VMSysGtk {
             gtk::main_iteration();
         }
 
-        if let gtk::ResponseType::Other(x) = response {
+        Ok(if let gtk::ResponseType::Other(x) = response {
             x
         } else {
             default_button
-        }
+        })
     }
 
-    fn run(&mut self, command: &str) {
+    fn run(&mut self, command: &str) -> Result<(), Box<dyn std::error::Error>> {
         let command = command_conv(command);
 
-        process::Command::new(command).spawn().ok();
+        process::Command::new(command).spawn()?;
+        Ok(())
     }
 
-    fn set_keyboard(&mut self, params: Option<HashMap<vm::Key, vm::OwnedIdentifier>>) {
+    fn set_keyboard(
+        &mut self,
+        params: Option<HashMap<vm::Key, vm::OwnedIdentifier>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.input_ctx.borrow_mut().keyboard = params;
-    }
-
-    fn set_menu(&mut self) {
         todo!()
     }
 
-    fn set_mouse(&mut self) {
+    fn set_menu(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         todo!()
     }
 
-    fn set_wait_mode(&mut self, mode: crate::ir::WaitMode) {
+    fn set_mouse(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        todo!()
+    }
+
+    fn set_wait_mode(
+        &mut self,
+        mode: crate::ir::WaitMode,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.wait_mode = mode;
+        Ok(())
     }
 
-    fn set_window(&mut self, option: crate::ir::SetWindowOption) {
+    fn set_window(
+        &mut self,
+        option: crate::ir::SetWindowOption,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         match option {
             ir::SetWindowOption::Maximize => self.window.maximize(),
             ir::SetWindowOption::Minimize => self.window.iconify(),
@@ -838,6 +949,7 @@ impl vm::VMSys for VMSysGtk {
                 self.window.deiconify();
             }
         }
+        Ok(())
     }
 
     fn use_background(
@@ -846,36 +958,55 @@ impl vm::VMSys for VMSysGtk {
         r: u16,
         g: u16,
         b: u16,
-    ) {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
         draw_ctx.background_transparency = option;
         draw_ctx.background_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
         draw_ctx.cr_background_inval();
         draw_ctx.cr_brush_inval();
+        Ok(())
     }
 
-    fn use_brush(&mut self, option: crate::ir::BrushType, r: u16, g: u16, b: u16) {
+    fn use_brush(
+        &mut self,
+        option: crate::ir::BrushType,
+        r: u16,
+        g: u16,
+        b: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
         draw_ctx.brush_type = option;
         draw_ctx.brush_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
         draw_ctx.cr_brush_inval();
+        Ok(())
     }
 
-    fn use_caption(&mut self, text: &str) {
+    fn use_caption(&mut self, text: &str) -> Result<(), Box<dyn std::error::Error>> {
         self.window.set_title(text);
+        Ok(())
     }
 
-    fn use_coordinates(&mut self, option: crate::ir::Coordinates) {
+    fn use_coordinates(
+        &mut self,
+        option: crate::ir::Coordinates,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
 
         draw_ctx.scale = match option {
             ir::Coordinates::Pixel => 1.,
             ir::Coordinates::Metric => {
-                let window_gdk = self.window.window().unwrap();
-                let monitor = window_gdk.display().monitor_at_window(&window_gdk).unwrap();
+                let window_gdk = self
+                    .window
+                    .window()
+                    .ok_or_else(|| Error::WindowMissingError)?;
+                let monitor = window_gdk
+                    .display()
+                    .monitor_at_window(&window_gdk)
+                    .ok_or_else(|| Error::MonitorMissingError)?;
                 (monitor.geometry().width() as f64) / (monitor.width_mm() as f64)
             }
         };
+        Ok(())
     }
 
     fn use_font(
@@ -889,7 +1020,7 @@ impl vm::VMSys for VMSysGtk {
         r: u16,
         g: u16,
         b: u16,
-    ) {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
 
         draw_ctx.text_underline = underline;
@@ -904,8 +1035,7 @@ impl vm::VMSys for VMSysGtk {
                 ir::FontWeight::Bold => cairo::FontWeight::Bold,
                 ir::FontWeight::NoBold => cairo::FontWeight::Normal,
             },
-        )
-        .unwrap();
+        )?;
 
         let mut matrix = cairo::Matrix::identity();
         draw_ctx.text_face = font_face;
@@ -914,10 +1044,10 @@ impl vm::VMSys for VMSysGtk {
         draw_ctx.cr_text_inval();
 
         if width == 0 && height == 0 {
-            return;
+            return Ok(());
         }
 
-        let extents = draw_ctx.cr_text().font_extents().unwrap();
+        let extents = draw_ctx.cr_text().font_extents()?;
         if width != 0 {
             matrix.set_xx(draw_ctx.scaled(width) / extents.max_x_advance());
         }
@@ -926,9 +1056,17 @@ impl vm::VMSys for VMSysGtk {
         }
         draw_ctx.text_matrix = matrix;
         draw_ctx.cr_text_inval();
+        Ok(())
     }
 
-    fn use_pen(&mut self, option: crate::ir::PenType, width: u16, r: u16, g: u16, b: u16) {
+    fn use_pen(
+        &mut self,
+        option: crate::ir::PenType,
+        width: u16,
+        r: u16,
+        g: u16,
+        b: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
 
         draw_ctx.pen_type = option;
@@ -936,9 +1074,13 @@ impl vm::VMSys for VMSysGtk {
         draw_ctx.pen_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
         draw_ctx.cr_pen_inval();
         draw_ctx.cr_background_inval();
+        Ok(())
     }
 
-    fn wait_input(&mut self, milliseconds: Option<u16>) {
+    fn wait_input(
+        &mut self,
+        milliseconds: Option<u16>,
+    ) -> Result<Option<vm::OwnedIdentifier>, Box<dyn std::error::Error>> {
         self.window.queue_draw();
         match self.wait_mode {
             ir::WaitMode::Null => {
@@ -972,5 +1114,6 @@ impl vm::VMSys for VMSysGtk {
                 }
             }
         }
+        Ok(None)
     }
 }
