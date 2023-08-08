@@ -1,5 +1,5 @@
 {Page 518}
-DrawText(1,1,"Pres E to end the program")
+DrawText(1,1,"Press E to end the program")
 SetKeyboard("E",End_it,"e",End_it)
 WaitInput()
 End_it:

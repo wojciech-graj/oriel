@@ -1,0 +1,6 @@
+{Page 503}
+UseBrush(SOLID,192,192,192)     {Use a light gray brush}
+DrawRoundRectangle(10,10,20,17,2,2)
+UseBackground(TRANSPARENT,0,0,0){Make text background transparent}
+DrawText(12,11,"OK")
+WaitInput()

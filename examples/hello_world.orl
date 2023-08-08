@@ -1,3 +1,0 @@
-{Page 470}
-DrawText(10,10,"Hello world!")
-WaitInput()

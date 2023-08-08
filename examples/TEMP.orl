@@ -4,10 +4,12 @@ UseBackground(OPAQUE, 255, 0, 0)
 UseFont("Courier Prime",30,30,NOBOLD,ITALIC,NOUNDERLINE,0,0,0)
 DrawBackground
 DrawText(10,10,"Hello world!")
-UsePen(DOT,1,255,255,0)
-UseBrush(SOLID,0,255,0)
+{UsePen(DOT,1,255,255,0)}
+{UseBrush(DIAGONALUP,0,255,0)}
 {DrawEllipse(10,10,100,60)}
 {DrawPie(10,10,100,60,70,50,60,10)}
 {DrawRectangle(40,40,200,200)}
 DrawRoundRectangle(20,20,80,80,30,10)
+UseBrush(SOLID,0,255,0)
+DrawFlood(4, 4, 0, 0, 0)
 WaitInput()
