@@ -3,13 +3,13 @@ program = @{ SOI ~ (whitespace_or_comment* ~ newline | command_group)* ~ EOI }
 command_group = ${ whitespace_or_comment* ~ (command ~ whitespace_gz)* ~ command? ~ whitespace_or_comment* ~ newline }
 
 command = ${
-    kword_command_nfunc
+    label
+  | kword_command_nfunc
   | command_func
   | command_goto
   | command_gosub
   | command_if_then
   | command_set
-  | label
 }
 
 command_func    = ${
@@ -151,7 +151,7 @@ kword_reserved = {
 
 integer    = @{ ASCII_DIGIT+ }
 string     = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-identifier = @{ !(kword_reserved) ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
+identifier = @{ !(kword_reserved ~ !(ASCII_ALPHA | "_")) ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
 
 newline               = _{ NEWLINE }
 whitespace            = _{ " " | "\t" | "\r" | "|" }

@@ -386,28 +386,27 @@ impl DrawCtx {
 }
 
 struct InputCtx {
-    keyboard: Option<HashMap<vm::Key, vm::OwnedIdentifier>>,
-    input: Option<vm::OwnedIdentifier>,
+    keyboard: Vec<vm::Key>,
 }
 
 impl InputCtx {
     fn new() -> Self {
         InputCtx {
-            keyboard: None,
-            input: None,
+            keyboard: Vec::new(),
         }
     }
 }
 
-pub struct VMSysGtk {
+pub struct VMSysGtk<'a> {
     window: gtk::Window,
     menu_bar: gtk::MenuBar,
     draw_ctx: Rc<RefCell<DrawCtx>>,
     input_ctx: Rc<RefCell<InputCtx>>,
+    keyboard: Option<HashMap<vm::Key, ir::Identifier<'a>>>,
     wait_mode: ir::WaitMode,
 }
 
-impl VMSysGtk {
+impl<'a> VMSysGtk<'a> {
     pub fn new(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
         gtk::init()?;
 
@@ -461,7 +460,11 @@ impl VMSysGtk {
         let input_ctx = Rc::new(RefCell::new(InputCtx::new()));
 
         let input_ctx_clone = input_ctx.clone();
-        window.connect_key_press_event(move |_, event_key| Inhibit(false));
+        window.connect_key_press_event(move |_, event_key| {
+            let mut input_ctx = input_ctx_clone.borrow_mut();
+            input_ctx.keyboard.extend(eventkey_conv(event_key));
+            Inhibit(false)
+        });
 
         window.show_all();
 
@@ -471,6 +474,7 @@ impl VMSysGtk {
             draw_ctx,
             input_ctx,
             wait_mode: ir::WaitMode::Null,
+            keyboard: None,
         };
 
         sys.use_coordinates(ir::Coordinates::Metric)?;
@@ -513,7 +517,7 @@ enum Error {
     MonitorMissingError,
 }
 
-impl vm::VMSys for VMSysGtk {
+impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
     fn beep(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.window
             .window()
@@ -912,10 +916,10 @@ impl vm::VMSys for VMSysGtk {
 
     fn set_keyboard(
         &mut self,
-        params: Option<HashMap<vm::Key, vm::OwnedIdentifier>>,
+        params: Option<HashMap<vm::Key, ir::Identifier<'a>>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        self.input_ctx.borrow_mut().keyboard = params;
-        todo!()
+        self.keyboard = params;
+        Ok(())
     }
 
     fn set_menu(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -1077,7 +1081,7 @@ impl vm::VMSys for VMSysGtk {
     fn wait_input(
         &mut self,
         milliseconds: Option<u16>,
-    ) -> Result<Option<vm::OwnedIdentifier>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<ir::Identifier<'a>>, Box<dyn std::error::Error>> {
         self.window.queue_draw();
         match self.wait_mode {
             ir::WaitMode::Null => {
@@ -1089,16 +1093,28 @@ impl vm::VMSys for VMSysGtk {
                             gtk::main_iteration();
                         }
                     }
+                    Ok(None)
                 } else {
                     while gtk::events_pending() {
                         gtk::main_iteration();
                     }
-
+                    {
+                        self.input_ctx.borrow_mut().keyboard = Vec::new();
+                    }
                     while self.window.is_visible() {
                         while gtk::events_pending() {
                             gtk::main_iteration();
                         }
+                        //TODO
+                        let mut input_ctx = self.input_ctx.borrow_mut();
+                        for key in input_ctx.keyboard.iter() {
+                            if let Some(&label) = self.keyboard.as_ref().unwrap().get(key) {
+                                return Ok(Some(label));
+                            }
+                        }
+                        input_ctx.keyboard = Vec::new();
                     }
+                    Ok(None)
                 }
             }
             ir::WaitMode::Focus => {
@@ -1109,14 +1125,14 @@ impl vm::VMSys for VMSysGtk {
                         }
                     }
                 }
+                Ok(None)
             }
         }
-        Ok(None)
     }
 }
 
-fn gdk_key_conv(key: gdk::keys::Key) -> Option<(ir::VirtualKey, Option<char>)> {
-    let keys = match key {
+fn eventkey_conv(event: &gdk::EventKey) -> Vec<vm::Key> {
+    let keys = match event.keyval() {
         gdk::keys::constants::BackSpace => Some((ir::VirtualKey::BackSpace, None)),
         gdk::keys::constants::Tab => Some((ir::VirtualKey::Tab, None)),
         gdk::keys::constants::Return => Some((ir::VirtualKey::Enter, None)),
@@ -1287,5 +1303,18 @@ fn gdk_key_conv(key: gdk::keys::Key) -> Option<(ir::VirtualKey, Option<char>)> {
         }
         _ => None,
     };
-    keys
+
+    match keys {
+        Some((virt, physical)) => match physical {
+            Some(physical) => vec![
+                vm::Key::Virtual(virt),
+                vm::Key::Physical(ir::PhysicalKey {
+                    chr: physical,
+                    ctrl: event.state().contains(gdk::ModifierType::CONTROL_MASK),
+                }),
+            ],
+            None => vec![vm::Key::Virtual(virt)],
+        },
+        None => Vec::new(),
+    }
 }

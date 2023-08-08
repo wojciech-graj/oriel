@@ -34,16 +34,7 @@ pub enum Key {
     Physical(ir::PhysicalKey),
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct OwnedIdentifier(pub String);
-
-impl<'a> From<ir::Identifier<'a>> for OwnedIdentifier {
-    fn from(value: ir::Identifier<'a>) -> Self {
-        OwnedIdentifier(value.0.to_owned())
-    }
-}
-
-pub trait VMSys {
+pub trait VMSys<'a> {
     fn beep(&mut self) -> Result<(), Box<dyn std::error::Error>>;
     fn draw_arc(
         &mut self,
@@ -144,7 +135,7 @@ pub trait VMSys {
     fn run(&mut self, command: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn set_keyboard(
         &mut self,
-        params: Option<HashMap<Key, OwnedIdentifier>>,
+        params: Option<HashMap<Key, ir::Identifier<'a>>>,
     ) -> Result<(), Box<dyn std::error::Error>>;
     fn set_menu(&mut self) -> Result<(), Box<dyn std::error::Error>>;
     fn set_mouse(&mut self) -> Result<(), Box<dyn std::error::Error>>; // TODO
@@ -193,7 +184,7 @@ pub trait VMSys {
     fn wait_input(
         &mut self,
         milliseconds: Option<u16>,
-    ) -> Result<Option<OwnedIdentifier>, Box<dyn std::error::Error>>;
+    ) -> Result<Option<ir::Identifier<'a>>, Box<dyn std::error::Error>>;
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -216,7 +207,7 @@ pub struct VM<'a> {
     ip: usize,
     vars: HashMap<ir::Identifier<'a>, u16>,
     call_stack: Vec<usize>,
-    ctx: &'a mut dyn VMSys,
+    ctx: &'a mut dyn VMSys<'a>,
 }
 
 macro_rules! integer_value {
@@ -238,7 +229,7 @@ macro_rules! incr_ip {
 }
 
 impl<'a> VM<'a> {
-    pub fn new(program: &'a ir::Program<'a>, ctx: &'a mut dyn VMSys) -> Self {
+    pub fn new(program: &'a ir::Program<'a>, ctx: &'a mut dyn VMSys<'a>) -> Self {
         VM {
             program,
             ip: 0,
@@ -564,14 +555,18 @@ impl<'a> VM<'a> {
                     integer_value!(self, b)?,
                 )?
             ),
-            ir::Command::WaitInput(milliseconds) => incr_ip!(
-                self,
-                self.ctx.wait_input(if let Some(i) = milliseconds {
-                    Some(integer_value!(self, i)?)
+            ir::Command::WaitInput(milliseconds) => {
+                self.ip = if let Some(label) =
+                    self.ctx.wait_input(if let Some(i) = milliseconds {
+                        Some(integer_value!(self, i)?)
+                    } else {
+                        None
+                    })? {
+                    *self.program.labels.get(&label).unwrap()
                 } else {
-                    None
-                })?
-            ),
+                    self.ip + 1
+                }
+            }
         };
         Ok(true)
     }
