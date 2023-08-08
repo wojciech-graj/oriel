@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use pest::{
     iterators::{Pair, Pairs},
-    Parser,
+    Parser, Span,
 };
 use pest_derive::Parser;
 
@@ -42,15 +42,19 @@ macro_rules! enum_impl_from_str {
     };
 }
 
+fn str_lit_parse<'a>(s: &'a str) -> Option<&'a str> {
+    if s.starts_with('"') && s.ends_with('"') {
+        Some(&s[1..(s.len() - 1)])
+    } else {
+        None
+    }
+}
+
 fn next_pair_str_lit<'a>(pairs: &mut Pairs<'a, Rule>) -> Result<&'a str, Error<'a>> {
     let pair = &(pairs.next().ok_or_else(|| Error::MissingArgError)?);
     if let Rule::string = pair.as_rule() {
-        let span = pair.as_span();
-        Ok(
-            pest::Span::new(span.get_input(), span.start() + 1, span.end() - 1)
-                .unwrap()
-                .as_str(),
-        )
+        Ok(str_lit_parse(pair.as_str())
+            .ok_or_else(|| Error::ArgTypeError(pair.into(), pair.as_str()))?)
     } else {
         Err(Error::ArgTypeError(pair.into(), pair.as_str()))
     }
@@ -353,31 +357,52 @@ impl<'a> Command<'a> {
                 button_pushed: Identifier(next_pair!(kwords)?.as_str()),
             },
             "run" => Command::Run(next_pair_str_lit(kwords)?),
-            "setkeyboard" => Command::SetKeyboard(if kwords.peek().is_some() {
+            "setkeyboard" => Command::SetKeyboard({
                 let mut params: HashMap<Key, Identifier> = HashMap::new();
                 while kwords.peek().is_some() {
                     params.insert(next_pair!(kwords)?.try_into()?, next_pair!(kwords)?.into());
                 }
-                Some(params)
-            } else {
-                None
+                params
             }),
-            "setmenu" => Command::SetMenu(Vec::new()),
-            "setmouse" => {
-                let mut params: Vec<SetMouseParam> = Vec::new();
+            "setmenu" => {
+                let mut items: Vec<MenuCategory> = Vec::new();
+                // while kwords.peek().is_some() {
+                //     let mut category = MenuCategory {
+                //         item: MenuItem {
+                //             name: next_pair_str_lit(kwords)?,
+                //             label: {
+                //                 let pair = kwords.next().ok_or_else(|| Error::MissingArgError)?;
+                //                 match pair.as_str() {
+                //                     "IGNORE" => None,
+                //                     s => Some(Identifier(str_lit_parse(s).ok_or_else(|| {
+                //                         Error::ArgTypeError((&pair).into(), pair.as_str())
+                //                     })?)),
+                //                 }
+                //             },
+                //         },
+                //         members: Vec::new(),
+                //     };
+                //     items.push(category);
+                // }
+                Command::SetMenu(items)
+            }
+            "setmouse" => Command::SetMouse({
+                let mut params: Vec<MouseRegion> = Vec::new();
                 while kwords.peek().is_some() {
-                    params.push(SetMouseParam {
+                    params.push(MouseRegion {
                         x1: next_pair!(kwords)?.try_into()?,
                         y1: next_pair!(kwords)?.try_into()?,
                         x2: next_pair!(kwords)?.try_into()?,
                         y2: next_pair!(kwords)?.try_into()?,
-                        label: next_pair!(kwords)?.into(),
-                        x: next_pair!(kwords)?.into(),
-                        y: next_pair!(kwords)?.into(),
+                        callbacks: MouseCallbacks {
+                            label: next_pair!(kwords)?.into(),
+                            x: next_pair!(kwords)?.into(),
+                            y: next_pair!(kwords)?.into(),
+                        },
                     });
                 }
-                Command::SetMouse(params)
-            }
+                params
+            }),
             "setwaitmode" => Command::SetWaitMode(next_pair!(kwords)?.try_into()?),
             "setwindow" => Command::SetWindow(next_pair!(kwords)?.try_into()?),
             "usebackground" => Command::UseBackground {

@@ -267,29 +267,37 @@ pub enum Key<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct MenuItem<'a> {
-    name: &'a str,
-    submenu: Vec<SubMenuItem<'a>>,
+pub struct MenuCategory<'a> {
+    pub item: MenuItem<'a>,
+    pub members: Vec<MenuMember<'a>>,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum SubMenuItem<'a> {
-    Item {
-        name: &'a str,
-        label: Option<Identifier<'a>>,
-    },
+pub struct MenuItem<'a> {
+    pub name: &'a str,
+    pub label: Option<Identifier<'a>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum MenuMember<'a> {
+    Item(MenuItem<'a>),
     Separator,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct SetMouseParam<'a> {
+pub struct MouseCallbacks<'a> {
+    pub label: Identifier<'a>,
+    pub x: Identifier<'a>,
+    pub y: Identifier<'a>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct MouseRegion<'a> {
     pub x1: Integer<'a>,
     pub y1: Integer<'a>,
     pub x2: Integer<'a>,
     pub y2: Integer<'a>,
-    pub label: Identifier<'a>,
-    pub x: Identifier<'a>,
-    pub y: Identifier<'a>,
+    pub callbacks: MouseCallbacks<'a>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -415,9 +423,9 @@ pub enum Command<'a> {
         op: MathOperator,
         i2: Integer<'a>,
     },
-    SetKeyboard(Option<HashMap<Key<'a>, Identifier<'a>>>),
-    SetMenu(Vec<MenuItem<'a>>),
-    SetMouse(Vec<SetMouseParam<'a>>),
+    SetKeyboard(HashMap<Key<'a>, Identifier<'a>>),
+    SetMenu(Vec<MenuCategory<'a>>),
+    SetMouse(Vec<MouseRegion<'a>>),
     SetWaitMode(WaitMode),
     SetWindow(SetWindowOption),
     UseBackground {

@@ -98,7 +98,7 @@ struct DrawCtx {
     cr_background_: RefCell<Option<cairo::Context>>,
     cr_brush_: RefCell<Option<cairo::Context>>,
 
-    text_face: cairo::FontFace,
+    text_face: cairo::FontFace, //TODO: bugfix default font
     text_matrix: cairo::Matrix,
     text_underline: crate::ir::FontUnderline,
     text_rgb: (f64, f64, f64),
@@ -385,31 +385,50 @@ impl DrawCtx {
     }
 }
 
+struct MouseRegion<'a> {
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    callbacks: &'a ir::MouseCallbacks<'a>,
+}
+
+impl<'a> MouseRegion<'a> {
+    fn contains(&self, x: f64, y: f64) -> bool {
+        self.x1 <= x && self.y1 < y && self.x2 >= x && self.y2 >= y
+    }
+}
+
 struct InputQueue {
     keyboard: Vec<vm::Key>,
+    mouse: Vec<(f64, f64)>,
 }
 
 impl InputQueue {
     fn new() -> Self {
         InputQueue {
             keyboard: Vec::new(),
+            mouse: Vec::new(),
         }
     }
 
     fn clear(&mut self) {
         self.keyboard = Vec::new();
+        self.mouse = Vec::new();
     }
 }
 
 struct InputCtx<'a> {
-    keyboard: Option<HashMap<vm::Key, ir::Identifier<'a>>>,
+    keyboard: HashMap<vm::Key, ir::Identifier<'a>>,
+    mouse: Vec<MouseRegion<'a>>,
     queue: Rc<RefCell<InputQueue>>,
 }
 
 impl<'a> InputCtx<'a> {
     fn new() -> Self {
         InputCtx {
-            keyboard: None,
+            keyboard: HashMap::new(),
+            mouse: Vec::new(),
             queue: Rc::new(RefCell::new(InputQueue::new())),
         }
     }
@@ -418,12 +437,23 @@ impl<'a> InputCtx<'a> {
         self.queue.borrow_mut().clear();
     }
 
-    fn process_queue(&self) -> Option<ir::Identifier<'a>> {
+    fn process_queue(&self, scale: f64) -> Option<vm::Input<'a>> {
         {
             let queue = self.queue.borrow();
             for key in queue.keyboard.iter() {
-                if let Some(&label) = self.keyboard.as_ref().unwrap().get(key) {
-                    return Some(label);
+                if let Some(&label) = self.keyboard.get(key) {
+                    return Some(vm::Input::Goto(label));
+                }
+            }
+            for mouse in queue.mouse.iter() {
+                for region in self.mouse.iter() {
+                    if region.contains(mouse.0, mouse.1) {
+                        return Some(vm::Input::Mouse {
+                            callbacks: region.callbacks,
+                            x: (mouse.0 / scale) as u16,
+                            y: (mouse.1 / scale) as u16,
+                        });
+                    }
                 }
             }
         }
@@ -499,6 +529,17 @@ impl<'a> VMSysGtk<'a> {
             queue.keyboard.extend(eventkey_conv(event_key));
             Inhibit(false)
         });
+
+        let queue_clone = input_ctx.queue.clone();
+        drawing_area.connect_button_press_event(move |_, event_button| {
+            if let Some(coords) = event_button.coords() {
+                let mut queue = queue_clone.borrow_mut();
+                queue.mouse.push(coords);
+            }
+            Inhibit(false)
+        });
+
+        drawing_area.add_events(gdk::EventMask::BUTTON_PRESS_MASK);
 
         window.show_all();
 
@@ -949,7 +990,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
     fn set_keyboard(
         &mut self,
-        params: Option<HashMap<vm::Key, ir::Identifier<'a>>>,
+        params: HashMap<vm::Key, ir::Identifier<'a>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.input_ctx.keyboard = params;
         Ok(())
@@ -959,8 +1000,22 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         todo!()
     }
 
-    fn set_mouse(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        todo!()
+    fn set_mouse(
+        &mut self,
+        regions: Vec<vm::MouseRegion<'a>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let draw_ctx = self.draw_ctx.borrow();
+        self.input_ctx.mouse = regions
+            .iter()
+            .map(|region| MouseRegion {
+                x1: draw_ctx.scaled(region.x1),
+                y1: draw_ctx.scaled(region.y1),
+                x2: draw_ctx.scaled(region.x2),
+                y2: draw_ctx.scaled(region.y2),
+                callbacks: region.callbacks,
+            })
+            .collect();
+        Ok(())
     }
 
     fn set_wait_mode(
@@ -1114,7 +1169,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
     fn wait_input(
         &mut self,
         milliseconds: Option<u16>,
-    ) -> Result<Option<ir::Identifier<'a>>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<vm::Input<'a>>, Box<dyn std::error::Error>> {
         self.window.queue_draw();
         match self.wait_mode {
             ir::WaitMode::Null => {
@@ -1132,12 +1187,13 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                         gtk::main_iteration();
                     }
                     self.input_ctx.clear_queue();
+                    let scale = self.draw_ctx.borrow().scale;
                     while self.window.is_visible() {
                         while gtk::events_pending() {
                             gtk::main_iteration();
                         }
-                        if let Some(label) = self.input_ctx.process_queue() {
-                            return Ok(Some(label));
+                        if let Some(input) = self.input_ctx.process_queue(scale) {
+                            return Ok(Some(input));
                         }
                     }
                     Ok(None)

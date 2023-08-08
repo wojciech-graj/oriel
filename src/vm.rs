@@ -34,6 +34,24 @@ pub enum Key {
     Physical(ir::PhysicalKey),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct MouseRegion<'a> {
+    pub x1: u16,
+    pub y1: u16,
+    pub x2: u16,
+    pub y2: u16,
+    pub callbacks: &'a ir::MouseCallbacks<'a>,
+}
+
+pub enum Input<'a> {
+    Goto(ir::Identifier<'a>),
+    Mouse {
+        callbacks: &'a ir::MouseCallbacks<'a>,
+        x: u16,
+        y: u16,
+    },
+}
+
 pub trait VMSys<'a> {
     fn beep(&mut self) -> Result<(), Box<dyn std::error::Error>>;
     fn draw_arc(
@@ -135,10 +153,13 @@ pub trait VMSys<'a> {
     fn run(&mut self, command: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn set_keyboard(
         &mut self,
-        params: Option<HashMap<Key, ir::Identifier<'a>>>,
+        params: HashMap<Key, ir::Identifier<'a>>,
     ) -> Result<(), Box<dyn std::error::Error>>;
     fn set_menu(&mut self) -> Result<(), Box<dyn std::error::Error>>;
-    fn set_mouse(&mut self) -> Result<(), Box<dyn std::error::Error>>; // TODO
+    fn set_mouse(
+        &mut self,
+        regions: Vec<MouseRegion<'a>>,
+    ) -> Result<(), Box<dyn std::error::Error>>;
     fn set_wait_mode(&mut self, mode: ir::WaitMode) -> Result<(), Box<dyn std::error::Error>>;
     fn set_window(&mut self, option: ir::SetWindowOption)
         -> Result<(), Box<dyn std::error::Error>>;
@@ -184,7 +205,7 @@ pub trait VMSys<'a> {
     fn wait_input(
         &mut self,
         milliseconds: Option<u16>,
-    ) -> Result<Option<ir::Identifier<'a>>, Box<dyn std::error::Error>>;
+    ) -> Result<Option<Input<'a>>, Box<dyn std::error::Error>>;
 }
 
 #[allow(clippy::enum_variant_names)]
@@ -463,34 +484,45 @@ impl<'a> VM<'a> {
                         .ok_or_else(|| Error::MathOperationError)?,
                 )
             ),
-            ir::Command::SetKeyboard(ref params) => incr_ip!(
+            ir::Command::SetKeyboard(ref hashmap) => incr_ip!(
                 self,
                 self.ctx.set_keyboard(
-                    params
-                        .as_ref()
-                        .map(|hashmap| {
-                            hashmap
-                                .iter()
-                                .map(|(&key, &label)| {
-                                    Ok((
-                                        match key {
-                                            ir::Key::Virtual(integer) => Key::Virtual(
-                                                (integer_value!(self, integer)?
-                                                    .try_into()
-                                                    .map_err(|_| Error::InvalidVirtualKeyError))?,
-                                            ),
-                                            ir::Key::Physical(physical) => Key::Physical(physical),
-                                        },
-                                        label.into(),
-                                    ))
-                                })
-                                .collect::<Result<HashMap<_, _>, Error>>()
+                    hashmap
+                        .iter()
+                        .map(|(&key, &label)| {
+                            Ok((
+                                match key {
+                                    ir::Key::Virtual(integer) => Key::Virtual(
+                                        (integer_value!(self, integer)?
+                                            .try_into()
+                                            .map_err(|_| Error::InvalidVirtualKeyError))?,
+                                    ),
+                                    ir::Key::Physical(physical) => Key::Physical(physical),
+                                },
+                                label.into(),
+                            ))
                         })
-                        .transpose()?
+                        .collect::<Result<HashMap<_, _>, Error>>()?
                 )?
             ),
-            ir::Command::SetMenu(_) => {}  //TODO
-            ir::Command::SetMouse(_) => {} //TODO
+            ir::Command::SetMenu(_) => {} //TODO
+            ir::Command::SetMouse(ref params) => incr_ip!(
+                self,
+                self.ctx.set_mouse(
+                    params
+                        .iter()
+                        .map(|param| {
+                            Ok(MouseRegion {
+                                x1: integer_value!(self, param.x1)?,
+                                y1: integer_value!(self, param.y1)?,
+                                x2: integer_value!(self, param.x2)?,
+                                y2: integer_value!(self, param.y2)?,
+                                callbacks: &param.callbacks,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?
+                )?
+            ),
             ir::Command::SetWaitMode(mode) => incr_ip!(self, self.ctx.set_wait_mode(mode)?),
             ir::Command::SetWindow(option) => incr_ip!(self, self.ctx.set_window(option)?),
             ir::Command::UseBackground { option, r, g, b } => incr_ip!(
@@ -556,13 +588,20 @@ impl<'a> VM<'a> {
                 )?
             ),
             ir::Command::WaitInput(milliseconds) => {
-                self.ip = if let Some(label) =
+                self.ip = if let Some(input) =
                     self.ctx.wait_input(if let Some(i) = milliseconds {
                         Some(integer_value!(self, i)?)
                     } else {
                         None
                     })? {
-                    *self.program.labels.get(&label).unwrap()
+                    match input {
+                        Input::Goto(label) => *self.program.labels.get(&label).unwrap(),
+                        Input::Mouse { callbacks, x, y } => {
+                            self.set_variable(callbacks.x, x);
+                            self.set_variable(callbacks.y, y);
+                            *self.program.labels.get(&callbacks.label).unwrap()
+                        }
+                    }
                 } else {
                     self.ip + 1
                 }
