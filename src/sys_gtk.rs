@@ -385,15 +385,50 @@ impl DrawCtx {
     }
 }
 
-struct InputCtx {
+struct InputQueue {
     keyboard: Vec<vm::Key>,
 }
 
-impl InputCtx {
+impl InputQueue {
     fn new() -> Self {
-        InputCtx {
+        InputQueue {
             keyboard: Vec::new(),
         }
+    }
+
+    fn clear(&mut self) {
+        self.keyboard = Vec::new();
+    }
+}
+
+struct InputCtx<'a> {
+    keyboard: Option<HashMap<vm::Key, ir::Identifier<'a>>>,
+    queue: Rc<RefCell<InputQueue>>,
+}
+
+impl<'a> InputCtx<'a> {
+    fn new() -> Self {
+        InputCtx {
+            keyboard: None,
+            queue: Rc::new(RefCell::new(InputQueue::new())),
+        }
+    }
+
+    fn clear_queue(&self) {
+        self.queue.borrow_mut().clear();
+    }
+
+    fn process_queue(&self) -> Option<ir::Identifier<'a>> {
+        {
+            let queue = self.queue.borrow();
+            for key in queue.keyboard.iter() {
+                if let Some(&label) = self.keyboard.as_ref().unwrap().get(key) {
+                    return Some(label);
+                }
+            }
+        }
+        self.clear_queue();
+        None
     }
 }
 
@@ -401,8 +436,7 @@ pub struct VMSysGtk<'a> {
     window: gtk::Window,
     menu_bar: gtk::MenuBar,
     draw_ctx: Rc<RefCell<DrawCtx>>,
-    input_ctx: Rc<RefCell<InputCtx>>,
-    keyboard: Option<HashMap<vm::Key, ir::Identifier<'a>>>,
+    input_ctx: InputCtx<'a>,
     wait_mode: ir::WaitMode,
 }
 
@@ -457,12 +491,12 @@ impl<'a> VMSysGtk<'a> {
                 .ok();
         });
 
-        let input_ctx = Rc::new(RefCell::new(InputCtx::new()));
+        let input_ctx = InputCtx::new();
 
-        let input_ctx_clone = input_ctx.clone();
+        let queue_clone = input_ctx.queue.clone();
         window.connect_key_press_event(move |_, event_key| {
-            let mut input_ctx = input_ctx_clone.borrow_mut();
-            input_ctx.keyboard.extend(eventkey_conv(event_key));
+            let mut queue = queue_clone.borrow_mut();
+            queue.keyboard.extend(eventkey_conv(event_key));
             Inhibit(false)
         });
 
@@ -474,7 +508,6 @@ impl<'a> VMSysGtk<'a> {
             draw_ctx,
             input_ctx,
             wait_mode: ir::WaitMode::Null,
-            keyboard: None,
         };
 
         sys.use_coordinates(ir::Coordinates::Metric)?;
@@ -918,7 +951,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         &mut self,
         params: Option<HashMap<vm::Key, ir::Identifier<'a>>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        self.keyboard = params;
+        self.input_ctx.keyboard = params;
         Ok(())
     }
 
@@ -1098,21 +1131,14 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                     while gtk::events_pending() {
                         gtk::main_iteration();
                     }
-                    {
-                        self.input_ctx.borrow_mut().keyboard = Vec::new();
-                    }
+                    self.input_ctx.clear_queue();
                     while self.window.is_visible() {
                         while gtk::events_pending() {
                             gtk::main_iteration();
                         }
-                        //TODO
-                        let mut input_ctx = self.input_ctx.borrow_mut();
-                        for key in input_ctx.keyboard.iter() {
-                            if let Some(&label) = self.keyboard.as_ref().unwrap().get(key) {
-                                return Ok(Some(label));
-                            }
+                        if let Some(label) = self.input_ctx.process_queue() {
+                            return Ok(Some(label));
                         }
-                        input_ctx.keyboard = Vec::new();
                     }
                     Ok(None)
                 }
