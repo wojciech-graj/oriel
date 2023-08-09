@@ -151,7 +151,7 @@ kword_reserved = {
 
 integer    = @{ ASCII_DIGIT+ }
 string     = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-identifier = @{ !(kword_reserved ~ !(ASCII_ALPHA | "_")) ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
+identifier = @{ !(kword_reserved ~ !(ASCII_ALPHA | ASCII_DIGIT | "_")) ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
 
 newline               = _{ NEWLINE }
 whitespace            = _{ " " | "\t" | "\r" | "|" }

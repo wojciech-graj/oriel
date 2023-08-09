@@ -17,6 +17,7 @@ use thiserror::Error;
 use crate::ir;
 use crate::vm;
 use crate::vm::VMSys;
+//TODO: rework font scaling: fixed width: check setkeyboard.orl usefont2.orl
 
 macro_rules! cairo_context_getter_and_invalidator {
     ($var: ident, $member: ident, $var_inval:ident, $cr: expr) => {
@@ -138,7 +139,7 @@ impl DrawCtx {
             pen_width: 1.,
             pen_rgb: (0., 0., 0.),
 
-            background_transparency: ir::BackgroundTransparency::Transparent,
+            background_transparency: ir::BackgroundTransparency::Opaque,
             background_rgb: (1., 1., 1.),
 
             brush_type: ir::BrushType::Null,
@@ -173,7 +174,7 @@ impl DrawCtx {
             cr.set_dash(
                 match draw_ctx.pen_type {
                     ir::PenType::Solid => &[],
-                    ir::PenType::Null => &[0.],
+                    ir::PenType::Null => &[0., 1.],
                     ir::PenType::Dash => &[24., 8.],
                     ir::PenType::Dot => &[4.],
                     ir::PenType::DashDot => &[12., 6., 3., 6.],
@@ -203,12 +204,10 @@ impl DrawCtx {
         cr_brush_inval,
         |draw_ctx: &DrawCtx, cr: &cairo::Context| {
             let (r, g, b) = draw_ctx.brush_rgb;
-            let (bkg_r, bkg_g, bkg_b) = draw_ctx.background_rgb;
             let pattern = cairo::SurfacePattern::create(match draw_ctx.brush_type {
                 ir::BrushType::Solid => cairo_util::new_surface_rgb(1, 1, r, g, b).unwrap().0,
                 ir::BrushType::DiagonalUp => {
-                    let (surface, cr) =
-                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
+                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_diagonal_up(&cr);
@@ -217,8 +216,7 @@ impl DrawCtx {
                     surface
                 }
                 ir::BrushType::DiagonalDown => {
-                    let (surface, cr) =
-                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
+                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_diagonal_down(&cr);
@@ -227,8 +225,7 @@ impl DrawCtx {
                     surface
                 }
                 ir::BrushType::DiagonalCross => {
-                    let (surface, cr) =
-                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
+                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_diagonal_up(&cr);
@@ -237,8 +234,7 @@ impl DrawCtx {
                     surface
                 }
                 ir::BrushType::Horizontal => {
-                    let (surface, cr) =
-                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
+                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_horizontal(&cr);
@@ -246,8 +242,7 @@ impl DrawCtx {
                     surface
                 }
                 ir::BrushType::Vertical => {
-                    let (surface, cr) =
-                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
+                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_vertical(&cr);
@@ -255,8 +250,7 @@ impl DrawCtx {
                     surface
                 }
                 ir::BrushType::Cross => {
-                    let (surface, cr) =
-                        cairo_util::new_surface_rgb(8, 8, bkg_r, bkg_g, bkg_b).unwrap();
+                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
                     cr.set_antialias(cairo::Antialias::None);
                     cr.set_source_rgb(r, g, b);
                     cairo_util::draw_pattern_horizontal(&cr);
@@ -276,6 +270,25 @@ impl DrawCtx {
             cr.set_source(pattern).ok();
         }
     );
+
+    fn create_pattern_surface(
+        &self,
+        width: i32,
+        height: i32,
+    ) -> Result<(cairo::ImageSurface, cairo::Context), cairo::Error> {
+        if let ir::BackgroundTransparency::Opaque = self.background_transparency {
+            let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, width, height)?;
+            let cr = cairo::Context::new(&surface)?;
+            let (r, g, b) = self.background_rgb;
+            cr.set_source_rgb(r, g, b);
+            cr.paint().ok();
+            Ok((surface, cr))
+        } else {
+            let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, width, height)?;
+            let cr = cairo::Context::new(&surface)?;
+            Ok((surface, cr))
+        }
+    }
 
     fn resize(&mut self, width: i32, height: i32) -> Result<(), cairo::Error> {
         self.surface = {
@@ -362,7 +375,11 @@ impl DrawCtx {
                 ctx.move_to(startx, starty);
             });
         }
-        let mut theta = theta1;
+        let mut theta = if theta1 > theta2 {
+            theta1
+        } else {
+            theta1 + TAU
+        };
         while theta > theta2 {
             self.line_exec(brush, |ctx| {
                 ctx.line_to(cx + sclx * theta.cos(), cy + scly * theta.sin());
@@ -496,8 +513,7 @@ impl<'a> VMSysGtk<'a> {
         gtk::init()?;
 
         let window = gtk::Window::new(gtk::WindowType::Toplevel);
-        window.set_default_size(640, 480);
-        window.set_resizable(false);
+        window.set_default_size(800, 600);
         window.set_title(format!("Oriel - {}", filename).as_str());
         let logo = gdk::gdk_pixbuf::Pixbuf::from_file("res/LOGO.png")?;
         window.set_icon(Some(&logo));
@@ -656,10 +672,12 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
 
+        let sclx = (x2 - x1) / 2.;
+        let scly = (y2 - y1) / 2.;
         let cx = (x2 + x1) / 2.;
         let cy = (y2 + y1) / 2.;
-        let theta1 = (y3 - cy).atan2(x3 - cx);
-        let theta2 = (y4 - cy).atan2(x4 - cx);
+        let theta1 = ((y3 - cy) / scly).atan2((x3 - cx) / sclx);
+        let theta2 = ((y4 - cy) / scly).atan2((x4 - cx) / sclx);
 
         draw_ctx.arc_path(x1, y1, x2, y2, theta1, theta2, true, false);
         draw_ctx.stroke()?;
@@ -711,10 +729,12 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
 
+        let sclx = (x2 - x1) / 2.;
+        let scly = (y2 - y1) / 2.;
         let cx = (x2 + x1) / 2.;
         let cy = (y2 + y1) / 2.;
-        let theta1 = (y3 - cy).atan2(x3 - cx); //TODO: scale before atan
-        let theta2 = (y4 - cy).atan2(x4 - cx);
+        let theta1 = ((y3 - cy) / scly).atan2((x3 - cx) / sclx);
+        let theta2 = ((y4 - cy) / scly).atan2((x4 - cx) / sclx);
 
         let pts = draw_ctx.arc_path(x1, y1, x2, y2, theta1, theta2, true, true);
         draw_ctx.line_exec(true, |ctx| {
@@ -753,7 +773,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x, y));
 
-        let tgt = [r as u8, g as u8, b as u8];
+        let tgt = [b as u8, g as u8, r as u8];
 
         let width = draw_ctx.surface.width() as usize;
         let height = draw_ctx.surface.height() as usize;
@@ -834,10 +854,12 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
 
+        let sclx = (x2 - x1) / 2.;
+        let scly = (y2 - y1) / 2.;
         let cx = (x2 + x1) / 2.;
         let cy = (y2 + y1) / 2.;
-        let theta1 = (y3 - cy).atan2(x3 - cx);
-        let theta2 = (y4 - cy).atan2(x4 - cx);
+        let theta1 = ((y3 - cy) / scly).atan2((x3 - cx) / sclx);
+        let theta2 = ((y4 - cy) / scly).atan2((x4 - cx) / sclx);
 
         let pts = draw_ctx.arc_path(x1, y1, x2, y2, theta1, theta2, true, true);
         draw_ctx.line_exec(true, |ctx| {
@@ -953,16 +975,23 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x, y));
 
+        let font_extents = draw_ctx.cr_text().font_extents()?;
+        let y = y + font_extents.height();
+
         if (ir::BackgroundTransparency::Opaque == draw_ctx.background_transparency)
             || (ir::FontUnderline::Underline == draw_ctx.text_underline)
         {
             let text_extents = draw_ctx.cr_text().text_extents(text)?;
-            let font_extents = draw_ctx.cr_text().font_extents()?;
+
             if let ir::BackgroundTransparency::Opaque = draw_ctx.background_transparency {
                 draw_ctx.cr_background().rectangle(
                     x,
                     y - font_extents.ascent(),
-                    text_extents.width(),
+                    if let Some(matrix) = draw_ctx.text_size {
+                        matrix.xx() * (text.len() as f64)
+                    } else {
+                        text_extents.width()
+                    },
                     font_extents.height(),
                 );
                 draw_ctx.cr_background().fill()?;
@@ -1121,6 +1150,9 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                 self.window.deiconify();
             }
         }
+        while gtk::events_pending() {
+            gtk::main_iteration();
+        }
         Ok(())
     }
 
@@ -1221,13 +1253,12 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         let mut matrix = cairo::Matrix::identity();
         draw_ctx.text_size = Some(matrix);
         draw_ctx.cr_text_inval();
-        let extents = draw_ctx.cr_text().font_extents()?;
+        let font_extents = draw_ctx.cr_text().font_extents()?;
         if width != 0 {
-            matrix.set_xx(draw_ctx.scaled(width) / extents.max_x_advance());
-            println!("{}", draw_ctx.scaled(width) / extents.max_x_advance());
+            matrix.set_xx(draw_ctx.scaled(width) / font_extents.max_x_advance());
         }
         if height != 0 {
-            matrix.set_yy(draw_ctx.scaled(height) / extents.height());
+            matrix.set_yy(draw_ctx.scaled(height) / font_extents.height());
         }
         draw_ctx.text_size = Some(matrix);
         draw_ctx.cr_text_inval();
@@ -1288,7 +1319,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
             }
             ir::WaitMode::Focus => {
                 if let Some(_milliseconds) = milliseconds {
-                    while !self.window.has_focus() {
+                    while !self.window.is_active() {
                         while gtk::events_pending() {
                             gtk::main_iteration();
                         }

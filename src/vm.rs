@@ -223,7 +223,7 @@ pub enum Error<'a> {
     MathOperationError,
     #[error("Invalid Virtual Key")]
     InvalidVirtualKeyError,
-    #[error("System Error")]
+    #[error("System Error: {}", .0)]
     SystemError(#[from] Box<dyn std::error::Error>),
 }
 
