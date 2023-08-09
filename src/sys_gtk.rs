@@ -1,3 +1,15 @@
+// Copyright (C) 2023  Wojciech Graj
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
 use std::cell::Ref;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -528,6 +540,12 @@ impl<'a> VMSysGtk<'a> {
             let about = gtk::AboutDialog::new();
             about.set_logo(Some(&logo));
             about.set_icon(Some(&logo));
+            about.set_program_name("Oriel");
+            about.set_version(option_env!("CARGO_PKG_VERSION"));
+            about.set_title("About Oriel");
+            about.set_license_type(gtk::License::Gpl30);
+            about.set_copyright(Some("Copyright \u{00A9} 2023 Wojciech Graj"));
+            about.set_comments(Some("An interpreter for the Oriel scripting language."));
             about.connect_delete_event(|about, _| {
                 about.hide();
                 Inhibit(true)
