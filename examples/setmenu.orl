@@ -1,7 +1,7 @@
 {Page 525-526}
 {Set up the menu}
      SetMenu("&Programs",IGNORE,
-             "&Notepad",Run_Notepad",
+             "&Notepad",Run_Notepad,
              "&Write",Run_Write,
              "&Calculator",Run_Calculator,
              SEPARATOR,

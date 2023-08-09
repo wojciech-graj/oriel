@@ -7,7 +7,7 @@
      UseBackground(TRANSPARENT,255,255,255)
 
 {Draw text, dotted line, and hatched rectangle}
-     DrawFext(10,10,"Text with a TRANSPARENT background")
+     DrawText(10,10,"Text with a TRANSPARENT background")
      UsePen(DOT,1,0,0,0)      {Dotted pen}
      DrawLine(10,21,40,21)
      UsePen(SOLID,1,0,0,0)    {Reset the pen to solid}
@@ -17,7 +17,7 @@
 {Change back to default background mode and color (white)}
      UseBackground (OPAQUE, 255,255,255)
 
-{Draw more text and another dotted line and hatched rectangle)
+{Draw more text and another dotted line and hatched rectangle}
      DrawText(10,60,"Text with an OPAQUE background")
      UsePen(DOT,1,0,0,0)
      DrawLine(10,71,40,71)

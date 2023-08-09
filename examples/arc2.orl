@@ -24,7 +24,7 @@ Arc3:
 Arc4:
    SetMouse(0,0,700,600,Arc_End,x4,y4)
    DrawText(10,300,
-     "Click on the arc’s ending point ")
+     "Click on the arc’s ending point                                  ")
    Goto Get_Input
 
 Arc_End:

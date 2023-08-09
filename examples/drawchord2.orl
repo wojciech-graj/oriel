@@ -31,9 +31,9 @@ Chord4:
 Chord_End:
    DrawBackground               {Clear the temporary ellipse}
    UsePen(SOLID,1,0,0,0)        {Use a solid black pen}
-   UseBrush(SOLID,255,0,0)      {Use a solid red brush)
-   DrawChord(x1,y2,x2,y2,x3,y3,x4,y4)
+   UseBrush(SOLID,255,0,0)      {Use a solid red brush}
+   DrawChord(x1,y1,x2,y2,x3,y3,x4,y4)
    Goto Chord1
 
-Get_input:
+Get_Input:
    WaitInput()

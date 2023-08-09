@@ -17,7 +17,7 @@ Pie2:
     "Click on lower-right corner of rectangle bounding pie")
    Goto Get_Input
 Pie3:
-   DrawEl1ipse(x1,y1,x2,y2)
+   DrawEllipse(x1,y1,x2,y2)
    SetMouse(0,0,700,600,Pie4,x3,y3)
    DrawText(10,300,
     "Click on one end of arc defining pie                 ")
@@ -26,7 +26,7 @@ Pie4:
    SetMouse(0,0,700,600,Pie_End,x4,y4)
    DrawText(10,300,
     "Click on other end of arc defining pie               ")
-   Goto Get_input
+   Goto Get_Input
 
 Pie_End:
    DrawBackground

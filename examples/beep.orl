@@ -3,7 +3,7 @@
    MessageBox(YESNOCANCEL,1,QUESTION,
               "Did you vote?","Question",Button)
 {Test for which button was selected}
-   If Button=1 Then Goto Beepi
+   If Button=1 Then Goto Beep1
    If Button=2 Then Goto Beep2
    {Else} Beep
    WaitInput (500) {Pause for 1/2 second}
