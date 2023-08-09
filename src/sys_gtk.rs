@@ -17,7 +17,6 @@ use thiserror::Error;
 use crate::ir;
 use crate::vm;
 use crate::vm::VMSys;
-//TODO: rework font scaling: fixed width: check setkeyboard.orl usefont2.orl
 
 macro_rules! cairo_context_getter_and_invalidator {
     ($var: ident, $member: ident, $var_inval:ident, $cr: expr) => {
@@ -100,7 +99,8 @@ struct DrawCtx {
     cr_brush_: RefCell<Option<cairo::Context>>,
 
     text_face: cairo::FontFace,
-    text_size: Option<cairo::Matrix>,
+    text_height_mul: Option<f64>,
+    text_width: Option<f64>,
     text_underline: crate::ir::FontUnderline,
     text_rgb: (f64, f64, f64),
 
@@ -131,7 +131,8 @@ impl DrawCtx {
                 cairo::FontSlant::Normal,
                 cairo::FontWeight::Normal,
             )?,
-            text_size: None,
+            text_height_mul: None,
+            text_width: None,
             text_underline: ir::FontUnderline::NoUnderline,
             text_rgb: (0., 0., 0.),
 
@@ -157,7 +158,9 @@ impl DrawCtx {
             let (r, g, b) = draw_ctx.text_rgb;
             cr.set_font_face(&draw_ctx.text_face);
             cr.set_source_rgb(r, g, b);
-            if let Some(mat) = draw_ctx.text_size {
+            if let Some(height_mul) = draw_ctx.text_height_mul {
+                let mut mat = cairo::Matrix::identity();
+                mat.set_yy(height_mul);
                 cr.set_font_matrix(mat);
             } else {
                 cr.set_font_size(18.);
@@ -978,33 +981,50 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         let font_extents = draw_ctx.cr_text().font_extents()?;
         let y = y + font_extents.height();
 
-        if (ir::BackgroundTransparency::Opaque == draw_ctx.background_transparency)
-            || (ir::FontUnderline::Underline == draw_ctx.text_underline)
-        {
-            let text_extents = draw_ctx.cr_text().text_extents(text)?;
+        let width = {
+            if let Some(width) = draw_ctx.text_width {
+                width * (text.len() as f64)
+            } else {
+                draw_ctx.cr_text().text_extents(text)?.width()
+            }
+        };
 
-            if let ir::BackgroundTransparency::Opaque = draw_ctx.background_transparency {
-                draw_ctx.cr_background().rectangle(
-                    x,
-                    y - font_extents.ascent(),
-                    if let Some(matrix) = draw_ctx.text_size {
-                        matrix.xx() * (text.len() as f64)
-                    } else {
-                        text_extents.width()
-                    },
-                    font_extents.height(),
-                );
-                draw_ctx.cr_background().fill()?;
-            }
-            if let ir::FontUnderline::Underline = draw_ctx.text_underline {
-                draw_ctx.cr_text().move_to(x, y + font_extents.descent());
-                draw_ctx.cr_text().rel_line_to(text_extents.width(), 0.);
-                draw_ctx.cr_text().stroke()?;
-            }
+        if let ir::BackgroundTransparency::Opaque = draw_ctx.background_transparency {
+            draw_ctx.cr_background().rectangle(
+                x,
+                y - font_extents.ascent(),
+                width,
+                font_extents.height(),
+            );
+            draw_ctx.cr_background().fill()?;
+        }
+        if let ir::FontUnderline::Underline = draw_ctx.text_underline {
+            draw_ctx.cr_text().move_to(x, y + font_extents.descent());
+            draw_ctx.cr_text().rel_line_to(width, 0.);
+            draw_ctx.cr_text().stroke()?;
         }
 
-        draw_ctx.cr_text().move_to(x, y);
-        draw_ctx.cr_text().show_text(text)?;
+        if let Some(width) = draw_ctx.text_width {
+            let mut x = x;
+            let orig_matrix = draw_ctx.cr_text().font_matrix();
+            for i in 0..text.len() {
+                let c = &text[i..=i];
+                let text_width = draw_ctx.cr_text().text_extents(c)?.width();
+                if text_width > 0. {
+                    let mut matrix = orig_matrix;
+                    matrix.set_xx(width / text_width);
+                    draw_ctx.cr_text().set_font_matrix(matrix);
+
+                    draw_ctx.cr_text().move_to(x, y);
+                    draw_ctx.cr_text().show_text(c)?;
+                }
+                x += width;
+                draw_ctx.cr_text().set_font_matrix(orig_matrix);
+            }
+        } else {
+            draw_ctx.cr_text().move_to(x, y);
+            draw_ctx.cr_text().show_text(text)?;
+        }
         Ok(())
     }
 
@@ -1244,23 +1264,21 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         draw_ctx.text_face = font_face;
         draw_ctx.text_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
 
-        if width == 0 && height == 0 {
-            draw_ctx.text_size = None;
-            draw_ctx.cr_text_inval();
-            return Ok(());
-        }
+        draw_ctx.text_width = if width != 0 {
+            Some(draw_ctx.scaled(width))
+        } else {
+            None
+        };
 
-        let mut matrix = cairo::Matrix::identity();
-        draw_ctx.text_size = Some(matrix);
-        draw_ctx.cr_text_inval();
-        let font_extents = draw_ctx.cr_text().font_extents()?;
-        if width != 0 {
-            matrix.set_xx(draw_ctx.scaled(width) / font_extents.max_x_advance());
-        }
-        if height != 0 {
-            matrix.set_yy(draw_ctx.scaled(height) / font_extents.height());
-        }
-        draw_ctx.text_size = Some(matrix);
+        draw_ctx.text_height_mul = if height != 0 {
+            draw_ctx.text_height_mul = Some(1.);
+            draw_ctx.cr_text_inval();
+            let font_extents = draw_ctx.cr_text().font_extents()?;
+            Some(draw_ctx.scaled(height) / font_extents.height())
+        } else {
+            None
+        };
+
         draw_ctx.cr_text_inval();
         Ok(())
     }
