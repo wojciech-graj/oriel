@@ -517,18 +517,18 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
                         let mut kwords = command_part.into_inner();
                         let var = Identifier(next_pair_unchecked!(kwords).as_str());
                         let i1 = next_pair_unchecked!(kwords).try_into()?;
-                        // TODO
-                        let (op, i2) = {
+                        let val = {
                             if kwords.peek().is_none() {
-                                (MathOperator::Add, Integer::Literal(0))
+                                SetValue::Value(i1)
                             } else {
-                                (
-                                    next_pair_unchecked!(kwords).try_into()?,
-                                    next_pair_unchecked!(kwords).try_into()?,
-                                )
+                                SetValue::Expression {
+                                    i1,
+                                    op: next_pair_unchecked!(kwords).try_into()?,
+                                    i2: next_pair_unchecked!(kwords).try_into()?,
+                                }
                             }
                         };
-                        prog.commands.push(Command::Set { var, i1, op, i2 });
+                        prog.commands.push(Command::Set { var, val });
                     }
                     Rule::label => {
                         let label = &(command_part.into_inner().next().unwrap());

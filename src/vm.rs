@@ -480,12 +480,16 @@ impl<'a> VM<'a> {
                 incr_ip!(self, self.set_variable(button_pushed, button_pushed_val));
             }
             ir::Command::Run(command) => incr_ip!(self, self.ctx.run(command)?),
-            ir::Command::Set { var, i1, op, i2 } => incr_ip!(
+            ir::Command::Set { var, val } => incr_ip!(
                 self,
                 self.set_variable(
                     var,
-                    op.eval(integer_value!(self, i1)?, integer_value!(self, i2)?)
-                        .ok_or_else(|| Error::MathOperationError)?,
+                    match val {
+                        ir::SetValue::Value(i) => integer_value!(self, i)?,
+                        ir::SetValue::Expression { i1, op, i2 } => op
+                            .eval(integer_value!(self, i1)?, integer_value!(self, i2)?)
+                            .ok_or_else(|| Error::MathOperationError)?,
+                    }
                 )
             ),
             ir::Command::SetKeyboard(ref hashmap) => incr_ip!(

@@ -309,6 +309,16 @@ pub enum Integer<'a> {
     Variable(Identifier<'a>),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum SetValue<'a> {
+    Value(Integer<'a>),
+    Expression {
+        i1: Integer<'a>,
+        op: MathOperator,
+        i2: Integer<'a>,
+    },
+}
+
 #[derive(Debug)]
 pub enum Command<'a> {
     Beep,
@@ -419,9 +429,7 @@ pub enum Command<'a> {
     Run(&'a str),
     Set {
         var: Identifier<'a>,
-        i1: Integer<'a>,
-        op: MathOperator,
-        i2: Integer<'a>,
+        val: SetValue<'a>,
     },
     SetKeyboard(HashMap<Key<'a>, Identifier<'a>>),
     SetMenu(Vec<MenuCategory<'a>>),
