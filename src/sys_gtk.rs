@@ -409,6 +409,7 @@ struct InputQueue {
     keyboard: Vec<vm::Key>,
     mouse: Vec<(f64, f64)>,
     menu: Vec<usize>,
+    closed: bool,
 }
 
 impl InputQueue {
@@ -417,6 +418,7 @@ impl InputQueue {
             keyboard: Vec::new(),
             mouse: Vec::new(),
             menu: Vec::new(),
+            closed: false,
         }
     }
 
@@ -451,6 +453,9 @@ impl<'a> InputCtx<'a> {
     fn process_queue(&self, scale: f64) -> Option<vm::Input<'a>> {
         {
             let queue = self.queue.borrow();
+            if queue.closed {
+                return Some(vm::Input::End);
+            }
             for key in queue.keyboard.iter() {
                 if let Some(&label) = self.keyboard.get(key) {
                     return Some(vm::Input::Goto(label));
@@ -554,6 +559,12 @@ impl<'a> VMSysGtk<'a> {
                 let mut queue = queue_clone.borrow_mut();
                 queue.mouse.push(coords);
             }
+            Inhibit(false)
+        });
+
+        let queue_clone = input_ctx.queue.clone();
+        window.connect_delete_event(move |_, _| {
+            queue_clone.borrow_mut().closed = true;
             Inhibit(false)
         });
 
@@ -1235,6 +1246,9 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                         while gtk::events_pending() {
                             gtk::main_iteration();
                         }
+                        if self.input_ctx.queue.borrow().closed {
+                            return Ok(Some(vm::Input::End));
+                        }
                     }
                     Ok(None)
                 } else {
@@ -1259,6 +1273,9 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                     while !self.window.has_focus() {
                         while gtk::events_pending() {
                             gtk::main_iteration();
+                        }
+                        if self.input_ctx.queue.borrow().closed {
+                            return Ok(Some(vm::Input::End));
                         }
                     }
                 }
