@@ -1115,7 +1115,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
     fn set_menu(
         &mut self,
-        menu: &Vec<ir::MenuCategory<'a>>,
+        menu: &[ir::MenuCategory<'a>],
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.menu_bar
             .children()
@@ -1125,13 +1125,13 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         for category in menu.iter() {
             self.menu_bar.append(&{
                 let item = menu_item_conv(&category.item, &mut self.input_ctx);
-                if category.members.len() > 0 {
+                if !category.members.is_empty() {
                     item.set_submenu(Some(&{
                         let submenu = gtk::Menu::new();
                         category.members.iter().for_each(|member| {
                             match member {
                                 ir::MenuMember::Item(subitem) => {
-                                    submenu.append(&menu_item_conv(&subitem, &mut self.input_ctx))
+                                    submenu.append(&menu_item_conv(subitem, &mut self.input_ctx))
                                 }
                                 ir::MenuMember::Separator => {
                                     submenu.append(&gtk::SeparatorMenuItem::new())
@@ -1152,7 +1152,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
     fn set_mouse(
         &mut self,
-        regions: Vec<vm::MouseRegion<'a>>,
+        regions: &[vm::MouseRegion<'a>],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let draw_ctx = self.draw_ctx.borrow();
         self.input_ctx.mouse = regions
@@ -1559,8 +1559,8 @@ fn eventkey_conv(event: &gdk::EventKey) -> Vec<vm::Key> {
 }
 
 fn menu_item_conv<'a>(item: &ir::MenuItem<'a>, input_ctx: &mut InputCtx<'a>) -> gtk::MenuItem {
-    let menu_item = if item.name.contains("&") {
-        gtk::MenuItem::with_mnemonic(&item.name.replace("&", "_"))
+    let menu_item = if item.name.contains('&') {
+        gtk::MenuItem::with_mnemonic(&item.name.replace('&', "_"))
     } else {
         gtk::MenuItem::with_label(item.name)
     };

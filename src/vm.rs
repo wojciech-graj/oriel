@@ -168,14 +168,9 @@ pub trait VMSys<'a> {
         &mut self,
         params: HashMap<Key, ir::Identifier<'a>>,
     ) -> Result<(), Box<dyn std::error::Error>>;
-    fn set_menu(
-        &mut self,
-        menu: &Vec<ir::MenuCategory<'a>>,
-    ) -> Result<(), Box<dyn std::error::Error>>;
-    fn set_mouse(
-        &mut self,
-        regions: Vec<MouseRegion<'a>>,
-    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn set_menu(&mut self, menu: &[ir::MenuCategory<'a>])
+        -> Result<(), Box<dyn std::error::Error>>;
+    fn set_mouse(&mut self, regions: &[MouseRegion<'a>]) -> Result<(), Box<dyn std::error::Error>>;
     fn set_wait_mode(&mut self, mode: ir::WaitMode) -> Result<(), Box<dyn std::error::Error>>;
     fn set_window(&mut self, option: ir::SetWindowOption)
         -> Result<(), Box<dyn std::error::Error>>;
@@ -519,7 +514,7 @@ impl<'a> VM<'a> {
                                     ),
                                     ir::Key::Physical(physical) => Key::Physical(physical),
                                 },
-                                label.into(),
+                                label,
                             ))
                         })
                         .collect::<Result<HashMap<_, _>, Error>>()?
@@ -529,7 +524,7 @@ impl<'a> VM<'a> {
             ir::Command::SetMouse(ref params) => incr_ip!(
                 self,
                 self.ctx.set_mouse(
-                    params
+                    &params
                         .iter()
                         .map(|param| {
                             Ok(MouseRegion {

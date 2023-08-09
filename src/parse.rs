@@ -54,7 +54,7 @@ macro_rules! enum_impl_from_str {
     };
 }
 
-fn str_lit_parse<'a>(s: &'a str) -> Option<&'a str> {
+fn str_lit_parse(s: &str) -> Option<&str> {
     if s.starts_with('"') && s.ends_with('"') {
         Some(&s[1..(s.len() - 1)])
     } else {
