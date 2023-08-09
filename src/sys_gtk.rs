@@ -99,7 +99,7 @@ struct DrawCtx {
     cr_brush_: RefCell<Option<cairo::Context>>,
 
     text_face: cairo::FontFace,
-    text_matrix: cairo::Matrix,
+    text_size: Option<cairo::Matrix>,
     text_underline: crate::ir::FontUnderline,
     text_rgb: (f64, f64, f64),
 
@@ -130,12 +130,7 @@ impl DrawCtx {
                 cairo::FontSlant::Normal,
                 cairo::FontWeight::Normal,
             )?,
-            text_matrix: {
-                let mut matrix = cairo::Matrix::identity(); //TODO: get system default?
-                matrix.set_xx(10.);
-                matrix.set_yy(10.);
-                matrix
-            },
+            text_size: None,
             text_underline: ir::FontUnderline::NoUnderline,
             text_rgb: (0., 0., 0.),
 
@@ -161,7 +156,11 @@ impl DrawCtx {
             let (r, g, b) = draw_ctx.text_rgb;
             cr.set_font_face(&draw_ctx.text_face);
             cr.set_source_rgb(r, g, b);
-            cr.set_font_matrix(draw_ctx.text_matrix);
+            if let Some(mat) = draw_ctx.text_size {
+                cr.set_font_matrix(mat);
+            } else {
+                cr.set_font_size(18.);
+            }
         }
     );
 
@@ -1201,16 +1200,18 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
             },
         )?;
 
-        let mut matrix = cairo::Matrix::identity();
         draw_ctx.text_face = font_face;
         draw_ctx.text_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
-        draw_ctx.text_matrix = matrix;
-        draw_ctx.cr_text_inval();
 
         if width == 0 && height == 0 {
+            draw_ctx.text_size = None;
+            draw_ctx.cr_text_inval();
             return Ok(());
         }
 
+        let mut matrix = cairo::Matrix::identity();
+        draw_ctx.text_size = Some(matrix);
+        draw_ctx.cr_text_inval();
         let extents = draw_ctx.cr_text().font_extents()?;
         if width != 0 {
             matrix.set_xx(draw_ctx.scaled(width) / extents.max_x_advance());
@@ -1219,7 +1220,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         if height != 0 {
             matrix.set_yy(draw_ctx.scaled(height) / extents.height());
         }
-        draw_ctx.text_matrix = matrix;
+        draw_ctx.text_size = Some(matrix);
         draw_ctx.cr_text_inval();
         Ok(())
     }
