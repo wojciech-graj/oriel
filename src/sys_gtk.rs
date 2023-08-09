@@ -98,7 +98,7 @@ struct DrawCtx {
     cr_background_: RefCell<Option<cairo::Context>>,
     cr_brush_: RefCell<Option<cairo::Context>>,
 
-    text_face: cairo::FontFace, //TODO: bugfix default font
+    text_face: cairo::FontFace,
     text_matrix: cairo::Matrix,
     text_underline: crate::ir::FontUnderline,
     text_rgb: (f64, f64, f64),
@@ -125,12 +125,17 @@ impl DrawCtx {
             cr_background_: RefCell::new(None),
             cr_brush_: RefCell::new(None),
 
-            text_face: {
-                let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, 0, 0)?;
-                let cr = cairo::Context::new(&surface)?;
-                cr.font_face()
+            text_face: cairo::FontFace::toy_create(
+                "Sans",
+                cairo::FontSlant::Normal,
+                cairo::FontWeight::Normal,
+            )?,
+            text_matrix: {
+                let mut matrix = cairo::Matrix::identity(); //TODO: get system default?
+                matrix.set_xx(10.);
+                matrix.set_yy(10.);
+                matrix
             },
-            text_matrix: cairo::Matrix::identity(),
             text_underline: ir::FontUnderline::NoUnderline,
             text_rgb: (0., 0., 0.),
 
@@ -154,6 +159,7 @@ impl DrawCtx {
         cr_text_inval,
         |draw_ctx: &DrawCtx, cr: &cairo::Context| {
             let (r, g, b) = draw_ctx.text_rgb;
+            cr.set_font_face(&draw_ctx.text_face);
             cr.set_source_rgb(r, g, b);
             cr.set_font_matrix(draw_ctx.text_matrix);
         }
@@ -1139,6 +1145,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         let extents = draw_ctx.cr_text().font_extents()?;
         if width != 0 {
             matrix.set_xx(draw_ctx.scaled(width) / extents.max_x_advance());
+            println!("{}", draw_ctx.scaled(width) / extents.max_x_advance());
         }
         if height != 0 {
             matrix.set_yy(draw_ctx.scaled(height) / extents.height());
