@@ -953,16 +953,25 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x, y));
 
-        if let ir::BackgroundTransparency::Opaque = draw_ctx.background_transparency {
+        if (ir::BackgroundTransparency::Opaque == draw_ctx.background_transparency)
+            || (ir::FontUnderline::Underline == draw_ctx.text_underline)
+        {
             let text_extents = draw_ctx.cr_text().text_extents(text)?;
             let font_extents = draw_ctx.cr_text().font_extents()?;
-            draw_ctx.cr_background().rectangle(
-                x,
-                y - font_extents.ascent(),
-                text_extents.width(),
-                font_extents.height(),
-            );
-            draw_ctx.cr_background().fill()?;
+            if let ir::BackgroundTransparency::Opaque = draw_ctx.background_transparency {
+                draw_ctx.cr_background().rectangle(
+                    x,
+                    y - font_extents.ascent(),
+                    text_extents.width(),
+                    font_extents.height(),
+                );
+                draw_ctx.cr_background().fill()?;
+            }
+            if let ir::FontUnderline::Underline = draw_ctx.text_underline {
+                draw_ctx.cr_text().move_to(x, y + font_extents.descent());
+                draw_ctx.cr_text().rel_line_to(text_extents.width(), 0.);
+                draw_ctx.cr_text().stroke()?;
+            }
         }
 
         draw_ctx.cr_text().move_to(x, y);

@@ -42,7 +42,7 @@ pub enum SetWindowOption {
     Restore,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BackgroundTransparency {
     Opaque,
     Transparent,
@@ -94,7 +94,7 @@ pub enum FontSlant {
     NoItalic,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FontUnderline {
     Underline,
     NoUnderline,
