@@ -44,6 +44,7 @@ pub struct MouseRegion<'a> {
 }
 
 pub enum Input<'a> {
+    End,
     Goto(ir::Identifier<'a>),
     Mouse {
         callbacks: &'a ir::MouseCallbacks<'a>,
@@ -155,7 +156,10 @@ pub trait VMSys<'a> {
         &mut self,
         params: HashMap<Key, ir::Identifier<'a>>,
     ) -> Result<(), Box<dyn std::error::Error>>;
-    fn set_menu(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    fn set_menu(
+        &mut self,
+        menu: &Vec<ir::MenuCategory<'a>>,
+    ) -> Result<(), Box<dyn std::error::Error>>;
     fn set_mouse(
         &mut self,
         regions: Vec<MouseRegion<'a>>,
@@ -505,7 +509,7 @@ impl<'a> VM<'a> {
                         .collect::<Result<HashMap<_, _>, Error>>()?
                 )?
             ),
-            ir::Command::SetMenu(_) => {} //TODO
+            ir::Command::SetMenu(ref menu) => incr_ip!(self, self.ctx.set_menu(menu)?),
             ir::Command::SetMouse(ref params) => incr_ip!(
                 self,
                 self.ctx.set_mouse(
@@ -595,6 +599,7 @@ impl<'a> VM<'a> {
                         None
                     })? {
                     match input {
+                        Input::End => return Ok(false),
                         Input::Goto(label) => *self.program.labels.get(&label).unwrap(),
                         Input::Mouse { callbacks, x, y } => {
                             self.set_variable(callbacks.x, x);

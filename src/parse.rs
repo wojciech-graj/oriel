@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use pest::{
     iterators::{Pair, Pairs},
-    Parser, Span,
+    Parser,
 };
 use pest_derive::Parser;
 
@@ -366,24 +366,45 @@ impl<'a> Command<'a> {
             }),
             "setmenu" => {
                 let mut items: Vec<MenuCategory> = Vec::new();
-                // while kwords.peek().is_some() {
-                //     let mut category = MenuCategory {
-                //         item: MenuItem {
-                //             name: next_pair_str_lit(kwords)?,
-                //             label: {
-                //                 let pair = kwords.next().ok_or_else(|| Error::MissingArgError)?;
-                //                 match pair.as_str() {
-                //                     "IGNORE" => None,
-                //                     s => Some(Identifier(str_lit_parse(s).ok_or_else(|| {
-                //                         Error::ArgTypeError((&pair).into(), pair.as_str())
-                //                     })?)),
-                //                 }
-                //             },
-                //         },
-                //         members: Vec::new(),
-                //     };
-                //     items.push(category);
-                // }
+                while kwords.peek().is_some() {
+                    items.push(MenuCategory {
+                        item: MenuItem {
+                            name: next_pair_str_lit(kwords)?,
+                            label: {
+                                let pair = kwords.next().ok_or_else(|| Error::MissingArgError)?;
+                                match pair.as_str() {
+                                    "IGNORE" => None,
+                                    s => Some(Identifier(s)),
+                                }
+                            },
+                        },
+                        members: {
+                            let mut members = Vec::new();
+                            loop {
+                                let pair = kwords.next().ok_or_else(|| Error::MissingArgError)?;
+                                members.push(match pair.as_str() {
+                                    "ENDPOPUP" => break,
+                                    "SEPARATOR" => MenuMember::Separator,
+                                    s => MenuMember::Item(MenuItem {
+                                        name: str_lit_parse(s).ok_or_else(|| {
+                                            Error::ArgTypeError((&pair).into(), pair.as_str())
+                                        })?,
+                                        label: {
+                                            let pair = kwords
+                                                .next()
+                                                .ok_or_else(|| Error::MissingArgError)?;
+                                            match pair.as_str() {
+                                                "IGNORE" => None,
+                                                s => Some(Identifier(s)),
+                                            }
+                                        }, //TODO: dedup
+                                    }),
+                                })
+                            }
+                            members
+                        },
+                    });
+                }
                 Command::SetMenu(items)
             }
             "setmouse" => Command::SetMouse({

@@ -408,6 +408,7 @@ impl<'a> MouseRegion<'a> {
 struct InputQueue {
     keyboard: Vec<vm::Key>,
     mouse: Vec<(f64, f64)>,
+    menu: Vec<usize>,
 }
 
 impl InputQueue {
@@ -415,18 +416,21 @@ impl InputQueue {
         InputQueue {
             keyboard: Vec::new(),
             mouse: Vec::new(),
+            menu: Vec::new(),
         }
     }
 
     fn clear(&mut self) {
         self.keyboard = Vec::new();
         self.mouse = Vec::new();
+        self.menu = Vec::new();
     }
 }
 
 struct InputCtx<'a> {
     keyboard: HashMap<vm::Key, ir::Identifier<'a>>,
     mouse: Vec<MouseRegion<'a>>,
+    menu: HashMap<usize, ir::Identifier<'a>>,
     queue: Rc<RefCell<InputQueue>>,
 }
 
@@ -435,6 +439,7 @@ impl<'a> InputCtx<'a> {
         InputCtx {
             keyboard: HashMap::new(),
             mouse: Vec::new(),
+            menu: HashMap::new(),
             queue: Rc::new(RefCell::new(InputQueue::new())),
         }
     }
@@ -462,6 +467,11 @@ impl<'a> InputCtx<'a> {
                     }
                 }
             }
+            for menu in queue.menu.iter() {
+                if let Some(&label) = self.menu.get(menu) {
+                    return Some(vm::Input::Goto(label));
+                }
+            }
         }
         self.clear_queue();
         None
@@ -470,6 +480,7 @@ impl<'a> InputCtx<'a> {
 
 pub struct VMSysGtk<'a> {
     window: gtk::Window,
+    help: gtk::MenuItem,
     menu_bar: gtk::MenuBar,
     draw_ctx: Rc<RefCell<DrawCtx>>,
     input_ctx: InputCtx<'a>,
@@ -488,19 +499,20 @@ impl<'a> VMSysGtk<'a> {
         let mainbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
         window.add(&mainbox);
 
+        let help = {
+            let help = gtk::MenuItem::with_mnemonic("_Help");
+            help.set_right_justified(true);
+            help.connect_activate(|_| {
+                // TODO
+                let about = gtk::AboutDialog::new();
+                about.show_all();
+            });
+            help
+        };
+
         let menu_bar = {
             let menu_bar = gtk::MenuBar::new();
-            let help = {
-                let help = gtk::MenuItem::with_mnemonic("_Help");
-                help.set_right_justified(true);
-                help.connect_activate(|_| {
-                    // TODO
-                    let about = gtk::AboutDialog::new();
-                    about.show_all();
-                });
-                help
-            };
-            menu_bar.append(&help);
+            //menu_bar.append(&help);
             menu_bar
         };
         mainbox.pack_start(&menu_bar, false, true, 0);
@@ -548,10 +560,12 @@ impl<'a> VMSysGtk<'a> {
         drawing_area.add_events(gdk::EventMask::BUTTON_PRESS_MASK);
 
         window.show_all();
+        window.set_mnemonics_visible(true);
 
         let mut sys = VMSysGtk {
             window,
             menu_bar,
+            help,
             draw_ctx,
             input_ctx,
             wait_mode: ir::WaitMode::Null,
@@ -990,7 +1004,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
     fn run(&mut self, command: &str) -> Result<(), Box<dyn std::error::Error>> {
         let command = command_conv(command);
 
-        process::Command::new(command).spawn()?;
+        process::Command::new("sh").arg("-c").arg(command).spawn()?;
         Ok(())
     }
 
@@ -1002,8 +1016,42 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         Ok(())
     }
 
-    fn set_menu(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        todo!()
+    fn set_menu(
+        &mut self,
+        menu: &Vec<ir::MenuCategory<'a>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        //TODO: mnemonics
+        self.menu_bar
+            .children()
+            .iter()
+            .for_each(|child| self.menu_bar.remove(child));
+        self.input_ctx.menu = HashMap::new();
+        for category in menu.iter() {
+            self.menu_bar.append(&{
+                let item = menu_item_conv(&category.item, &mut self.input_ctx);
+                if category.members.len() > 0 {
+                    item.set_submenu(Some(&{
+                        let submenu = gtk::Menu::new();
+                        category.members.iter().for_each(|member| {
+                            match member {
+                                ir::MenuMember::Item(subitem) => {
+                                    submenu.append(&menu_item_conv(&subitem, &mut self.input_ctx))
+                                }
+                                ir::MenuMember::Separator => {
+                                    submenu.append(&gtk::SeparatorMenuItem::new())
+                                }
+                            };
+                        });
+                        submenu
+                    }));
+                }
+                item
+            });
+        }
+        self.menu_bar.append(&self.help);
+        self.window.show_all();
+        self.window.set_mnemonics_visible(true);
+        Ok(())
     }
 
     fn set_mouse(
@@ -1406,4 +1454,19 @@ fn eventkey_conv(event: &gdk::EventKey) -> Vec<vm::Key> {
         },
         None => Vec::new(),
     }
+}
+
+fn menu_item_conv<'a>(item: &ir::MenuItem<'a>, input_ctx: &mut InputCtx<'a>) -> gtk::MenuItem {
+    let menu_item = if item.name.contains("&") {
+        gtk::MenuItem::with_mnemonic(&item.name.replace("&", "_"))
+    } else {
+        gtk::MenuItem::with_label(item.name)
+    };
+    if let Some(label) = item.label {
+        let queue_clone = input_ctx.queue.clone();
+        let key = input_ctx.menu.len();
+        menu_item.connect_activate(move |_| queue_clone.borrow_mut().menu.push(key));
+        input_ctx.menu.insert(key, label);
+    }
+    menu_item
 }
