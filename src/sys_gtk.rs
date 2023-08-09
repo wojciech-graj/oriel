@@ -500,16 +500,27 @@ impl<'a> VMSysGtk<'a> {
         window.set_default_size(640, 480);
         window.set_resizable(false);
         window.set_title(format!("Oriel - {}", filename).as_str());
+        let logo = gdk::gdk_pixbuf::Pixbuf::from_file("res/LOGO.png")?;
+        window.set_icon(Some(&logo));
 
         let mainbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
         window.add(&mainbox);
 
+        let about = {
+            let about = gtk::AboutDialog::new();
+            about.set_logo(Some(&logo));
+            about.set_icon(Some(&logo));
+            about.connect_delete_event(|about, _| {
+                about.hide();
+                Inhibit(true)
+            });
+            about
+        };
+
         let help = {
             let help = gtk::MenuItem::with_mnemonic("_Help");
             help.set_right_justified(true);
-            help.connect_activate(|_| {
-                // TODO
-                let about = gtk::AboutDialog::new();
+            help.connect_activate(move |_| {
                 about.show_all();
             });
             help
@@ -517,7 +528,7 @@ impl<'a> VMSysGtk<'a> {
 
         let menu_bar = {
             let menu_bar = gtk::MenuBar::new();
-            //menu_bar.append(&help);
+            menu_bar.append(&help);
             menu_bar
         };
         mainbox.pack_start(&menu_bar, false, true, 0);
@@ -1031,7 +1042,6 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         &mut self,
         menu: &Vec<ir::MenuCategory<'a>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        //TODO: mnemonics
         self.menu_bar
             .children()
             .iter()
@@ -1250,7 +1260,6 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                             return Ok(Some(vm::Input::End));
                         }
                     }
-                    Ok(None)
                 } else {
                     while gtk::events_pending() {
                         gtk::main_iteration();
@@ -1265,7 +1274,6 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                             return Ok(Some(input));
                         }
                     }
-                    Ok(None)
                 }
             }
             ir::WaitMode::Focus => {
@@ -1279,9 +1287,9 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                         }
                     }
                 }
-                Ok(None)
             }
         }
+        Ok(None)
     }
 }
 
