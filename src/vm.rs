@@ -230,6 +230,8 @@ pub enum Error<'a> {
     MathOperationError,
     #[error("Invalid Virtual Key")]
     InvalidVirtualKeyError,
+    #[error("Nonexistent Label")]
+    NonexistentLabelError,
     #[error("System Error: {}", .0)]
     SystemError(#[from] Box<dyn std::error::Error>),
 }
@@ -280,6 +282,15 @@ impl<'a> VM<'a> {
 
     fn set_variable(&mut self, ident: ir::Identifier<'a>, val: u16) {
         self.vars.insert(ident, val);
+    }
+
+    fn goto_label(&mut self, label: ir::Identifier<'_>) -> Result<(), Error<'a>> {
+        self.ip = *(self
+            .program
+            .labels
+            .get(&label)
+            .ok_or_else(|| Error::NonexistentLabelError)?);
+        Ok(())
     }
 
     pub fn step(&mut self) -> Result<bool, Error<'a>> {
@@ -446,9 +457,9 @@ impl<'a> VM<'a> {
                     .draw_text(integer_value!(self, x)?, integer_value!(self, y)?, text)?
             ),
             ir::Command::End => return Ok(false),
-            ir::Command::Gosub(ref ident) => {
+            ir::Command::Gosub(ident) => {
                 self.call_stack.push(self.ip + 1);
-                self.ip = *(self.program.labels.get(ident).unwrap());
+                self.goto_label(ident)?
             }
             ir::Command::Return => {
                 self.ip = self
@@ -456,7 +467,7 @@ impl<'a> VM<'a> {
                     .pop()
                     .ok_or_else(|| Error::CallStackExhaustedError)?;
             }
-            ir::Command::Goto(ref ident) => self.ip = *(self.program.labels.get(ident).unwrap()),
+            ir::Command::Goto(ident) => self.goto_label(ident)?,
             ir::Command::If {
                 i1,
                 op,
@@ -603,23 +614,22 @@ impl<'a> VM<'a> {
                 )?
             ),
             ir::Command::WaitInput(milliseconds) => {
-                self.ip = if let Some(input) =
-                    self.ctx.wait_input(if let Some(i) = milliseconds {
-                        Some(integer_value!(self, i)?)
-                    } else {
-                        None
-                    })? {
+                if let Some(input) = self.ctx.wait_input(if let Some(i) = milliseconds {
+                    Some(integer_value!(self, i)?)
+                } else {
+                    None
+                })? {
                     match input {
                         Input::End => return Ok(false),
-                        Input::Goto(label) => *self.program.labels.get(&label).unwrap(),
+                        Input::Goto(label) => self.goto_label(label)?,
                         Input::Mouse { callbacks, x, y } => {
                             self.set_variable(callbacks.x, x);
                             self.set_variable(callbacks.y, y);
-                            *self.program.labels.get(&callbacks.label).unwrap()
+                            self.goto_label(callbacks.label)?;
                         }
-                    }
+                    };
                 } else {
-                    self.ip + 1
+                    self.ip += 1;
                 }
             }
         };
