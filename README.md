@@ -2,6 +2,8 @@
 
 Oriel is a *"graphics-based batch language"* from the *Power Tools* series of books. This interpreter aims to accurately recreate the 1991 implementation of the language for Windows 3 on modern hardware using Rust and Gtk+3.
 
+To read about Oriel, see the book's chapter in `book.pdf`
+
 Support for the  1994 Windows NT version of Oriel may be added in the future, but "Windows NT Power Tools" is extremely elusive.
 
 ![set](screenshot/set.png)
