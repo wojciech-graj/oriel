@@ -499,7 +499,7 @@ impl<'a> ir::Program<'a> {
     pub fn from_src(src: &'a str) -> Result<Self, Error> {
         let mut pairs = OrielParser::parse(Rule::program, src)?;
 
-        let mut prog = ir::Program {
+        let mut prog = Self {
             commands: Vec::new(),
             labels: HashMap::new(),
         };

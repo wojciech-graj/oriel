@@ -16,6 +16,7 @@ impl<'a> MouseRegion<'a> {
     }
 }
 
+#[derive(Default)]
 pub struct InputQueue {
     pub keyboard: Vec<vm::Key>,
     pub mouse: Vec<(f64, f64)>,
@@ -24,15 +25,6 @@ pub struct InputQueue {
 }
 
 impl InputQueue {
-    fn new() -> Self {
-        InputQueue {
-            keyboard: Vec::new(),
-            mouse: Vec::new(),
-            menu: Vec::new(),
-            closed: false,
-        }
-    }
-
     fn clear(&mut self) {
         self.keyboard = Vec::new();
         self.mouse = Vec::new();
@@ -40,6 +32,7 @@ impl InputQueue {
     }
 }
 
+#[derive(Default)]
 pub struct InputCtx<'a> {
     pub keyboard: HashMap<vm::Key, ir::Identifier<'a>>,
     pub mouse: Vec<MouseRegion<'a>>,
@@ -49,12 +42,7 @@ pub struct InputCtx<'a> {
 
 impl<'a> InputCtx<'a> {
     pub fn new() -> Self {
-        InputCtx {
-            keyboard: HashMap::new(),
-            mouse: Vec::new(),
-            menu: HashMap::new(),
-            queue: Rc::new(RefCell::new(InputQueue::new())),
-        }
+        Self::default()
     }
 
     pub fn clear_queue(&self) {

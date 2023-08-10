@@ -47,11 +47,32 @@ impl<'a> VMSysGtk<'a> {
     pub fn new(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
         gtk::init()?;
 
-        let window = gtk::Window::new(gtk::WindowType::Toplevel);
-        window.set_default_size(800, 600);
-        window.set_title(format!("Oriel - {filename}").as_str());
         let logo = pixbuf_from_bytes(include_bytes!("res/LOGO.png"), None)?;
-        window.set_icon(Some(&logo));
+
+        let input_ctx = input::InputCtx::new();
+        let draw_ctx = Rc::new(RefCell::new(draw::DrawCtx::new()?));
+
+        let window = {
+            let window = gtk::Window::new(gtk::WindowType::Toplevel);
+            window.set_default_size(800, 600);
+            window.set_title(format!("Oriel - {filename}").as_str());
+            window.set_icon(Some(&logo));
+
+            let queue_clone = input_ctx.queue.clone();
+            window.connect_key_press_event(move |_, event_key| {
+                let mut queue = queue_clone.borrow_mut();
+                queue.keyboard.extend(eventkey_conv(event_key));
+                Inhibit(false)
+            });
+
+            let queue_clone = input_ctx.queue.clone();
+            window.connect_delete_event(move |_, _| {
+                queue_clone.borrow_mut().closed = true;
+                Inhibit(false)
+            });
+
+            window
+        };
 
         let mainbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
         window.add(&mainbox);
@@ -89,53 +110,39 @@ impl<'a> VMSysGtk<'a> {
         };
         mainbox.pack_start(&menu_bar, false, true, 0);
 
-        let drawing_area = gtk::DrawingArea::new();
+        let drawing_area = {
+            let drawing_area = gtk::DrawingArea::new();
+            drawing_area.add_events(gdk::EventMask::BUTTON_PRESS_MASK);
+
+            let draw_ctx_clone = draw_ctx.clone();
+            drawing_area.connect_draw(move |_, cr| {
+                let draw_ctx = draw_ctx_clone.borrow();
+                cr.set_source_surface(draw_ctx.surface.as_ref(), 0., 0.)
+                    .ok();
+                cr.paint().ok();
+                Inhibit(false)
+            });
+
+            let draw_ctx_clone = draw_ctx.clone();
+            drawing_area.connect_size_allocate(move |_, rect| {
+                draw_ctx_clone
+                    .borrow_mut()
+                    .resize(rect.width(), rect.height())
+                    .ok();
+            });
+
+            let queue_clone = input_ctx.queue.clone();
+            drawing_area.connect_button_press_event(move |_, event_button| {
+                if let Some(coords) = event_button.coords() {
+                    let mut queue = queue_clone.borrow_mut();
+                    queue.mouse.push(coords);
+                }
+                Inhibit(false)
+            });
+
+            drawing_area
+        };
         mainbox.pack_start(&drawing_area, true, true, 0);
-
-        let draw_ctx = Rc::new(RefCell::new(draw::DrawCtx::new()?));
-
-        let draw_ctx_clone = draw_ctx.clone();
-        drawing_area.connect_draw(move |_, cr| {
-            let draw_ctx = draw_ctx_clone.borrow();
-            cr.set_source_surface(draw_ctx.surface.as_ref(), 0., 0.)
-                .ok();
-            cr.paint().ok();
-            Inhibit(false)
-        });
-
-        let draw_ctx_clone = draw_ctx.clone();
-        drawing_area.connect_size_allocate(move |_, rect| {
-            draw_ctx_clone
-                .borrow_mut()
-                .resize(rect.width(), rect.height())
-                .ok();
-        });
-
-        let input_ctx = input::InputCtx::new();
-
-        let queue_clone = input_ctx.queue.clone();
-        window.connect_key_press_event(move |_, event_key| {
-            let mut queue = queue_clone.borrow_mut();
-            queue.keyboard.extend(eventkey_conv(event_key));
-            Inhibit(false)
-        });
-
-        let queue_clone = input_ctx.queue.clone();
-        drawing_area.connect_button_press_event(move |_, event_button| {
-            if let Some(coords) = event_button.coords() {
-                let mut queue = queue_clone.borrow_mut();
-                queue.mouse.push(coords);
-            }
-            Inhibit(false)
-        });
-
-        let queue_clone = input_ctx.queue.clone();
-        window.connect_delete_event(move |_, _| {
-            queue_clone.borrow_mut().closed = true;
-            Inhibit(false)
-        });
-
-        drawing_area.add_events(gdk::EventMask::BUTTON_PRESS_MASK);
 
         window.show_all();
         window.set_mnemonics_visible(true);
@@ -152,49 +159,6 @@ impl<'a> VMSysGtk<'a> {
         sys.use_coordinates(ir::Coordinates::Metric)?;
 
         Ok(sys)
-    }
-}
-
-fn pixbuf_from_bytes(
-    bytes: &[u8],
-    size: Option<(i32, i32)>,
-) -> Result<gdk::gdk_pixbuf::Pixbuf, Error> {
-    let loader = gdk_pixbuf::PixbufLoader::new();
-    if let Some((width, height)) = size {
-        loader.set_size(width, height);
-    }
-    loader.write(bytes)?;
-    loader.close()?;
-    loader.pixbuf().ok_or_else(|| Error::PixbufLoadError)
-}
-
-fn pixbuf_from_filename(
-    filename: &str,
-    size: Option<(i32, i32)>,
-) -> Result<gdk::gdk_pixbuf::Pixbuf, Error> {
-    match filename {
-        "C:\\WINDOWS\\BOXES.BMP" => pixbuf_from_bytes(include_bytes!("res/BOXES.BMP"), size),
-        "C:\\WINDOWS\\CHESS.BMP" => pixbuf_from_bytes(include_bytes!("res/CHESS.BMP"), size),
-        "C:\\WINDOWS\\PAPER.BMP" => pixbuf_from_bytes(include_bytes!("res/PAPER.BMP"), size),
-        "C:\\WINDOWS\\PARTY.BMP" => pixbuf_from_bytes(include_bytes!("res/PARTY.BMP"), size),
-        "C:\\WINDOWS\\PYRAMID.BMP" => pixbuf_from_bytes(include_bytes!("res/PYRAMID.BMP"), size),
-        "C:\\WINDOWS\\RIBBONS.BMP" => pixbuf_from_bytes(include_bytes!("res/RIBBONS.BMP"), size),
-        "C:\\WINDOWS\\WEAVE.BMP" => pixbuf_from_bytes(include_bytes!("res/WEAVE.BMP"), size),
-        filename => Ok(if let Some((width, height)) = size {
-            gdk_pixbuf::Pixbuf::from_file_at_size(filename, width, height)
-        } else {
-            gdk_pixbuf::Pixbuf::from_file(filename)
-        }?),
-    }
-}
-
-fn command_conv(command: &str) -> &str {
-    match command {
-        "NOTEPAD.EXE" => "mousepad",
-        "CALC.EXE" => "libreoffice --calc",
-        "WRITE.EXE" => "libreoffice --writer",
-        "C:\\COMMAND.COM" => "xterm",
-        command => command,
     }
 }
 
@@ -237,14 +201,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
 
-        let sclx = (x2 - x1) / 2.;
-        let scly = (y2 - y1) / 2.;
-        let cx = (x2 + x1) / 2.;
-        let cy = (y2 + y1) / 2.;
-        let theta1 = ((y3 - cy) / scly).atan2((x3 - cx) / sclx);
-        let theta2 = ((y4 - cy) / scly).atan2((x4 - cx) / sclx);
-
-        draw_ctx.arc_path(x1, y1, x2, y2, theta1, theta2, true, false);
+        draw_ctx.arc_path_rect_bound(x1, y1, x2, y2, x3, y3, x4, y4, false);
         draw_ctx.stroke()?;
         Ok(())
     }
@@ -293,14 +250,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
 
-        let sclx = (x2 - x1) / 2.;
-        let scly = (y2 - y1) / 2.;
-        let cx = (x2 + x1) / 2.;
-        let cy = (y2 + y1) / 2.;
-        let theta1 = ((y3 - cy) / scly).atan2((x3 - cx) / sclx);
-        let theta2 = ((y4 - cy) / scly).atan2((x4 - cx) / sclx);
-
-        let pts = draw_ctx.arc_path(x1, y1, x2, y2, theta1, theta2, true, true);
+        let pts = draw_ctx.arc_path_rect_bound(x1, y1, x2, y2, x3, y3, x4, y4, true);
         draw_ctx.line_exec(true, |ctx| {
             ctx.line_to(pts.0, pts.1);
         });
@@ -320,7 +270,16 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2));
 
-        draw_ctx.arc_path(x1, y1, x2, y2, TAU, 0.0, true, true);
+        draw_ctx.arc_path(
+            (x2 + x1) / 2.,
+            (y2 + y1) / 2.,
+            (x2 - x1) / 2.,
+            (y2 - y1) / 2.,
+            TAU,
+            0.0,
+            true,
+            true,
+        );
         draw_ctx.draw()?;
         Ok(())
     }
@@ -344,6 +303,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         let mut mask_surface: Option<Result<cairo::ImageSurface, cairo::Error>> = None;
 
+        // This is inefficient, but implementing a more efficient flood-fill is a hassle
         draw_ctx.surface.with_data(|data| {
             let mut mask: Vec<u8> = (0..(data.len() / 4)).map(|_| 0u8).collect();
             let mut q: Vec<(usize, usize)> = vec![(x as usize, y as usize)];
@@ -418,16 +378,9 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3, x4, y4));
 
-        let sclx = (x2 - x1) / 2.;
-        let scly = (y2 - y1) / 2.;
-        let cx = (x2 + x1) / 2.;
-        let cy = (y2 + y1) / 2.;
-        let theta1 = ((y3 - cy) / scly).atan2((x3 - cx) / sclx);
-        let theta2 = ((y4 - cy) / scly).atan2((x4 - cx) / sclx);
-
-        let pts = draw_ctx.arc_path(x1, y1, x2, y2, theta1, theta2, true, true);
+        let pts = draw_ctx.arc_path_rect_bound(x1, y1, x2, y2, x3, y3, x4, y4, true);
         draw_ctx.line_exec(true, |ctx| {
-            ctx.line_to(cx, cy);
+            ctx.line_to((x2 + x1) / 2., (y2 + y1) / 2.);
             ctx.line_to(pts.0, pts.1);
         });
         draw_ctx.draw()?;
@@ -469,19 +422,22 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2, x3, y3));
 
-        draw_ctx.arc_path(x1, y1, x1 + x3, y1 + y3, PI * 1.5, PI, false, true);
+        let x3 = x3 / 2.;
+        let y3 = y3 / 2.;
+
+        draw_ctx.arc_path(x1 + x3, y1 + y3, x3, y3, PI * 1.5, PI, false, true);
         draw_ctx.line_exec(true, |ctx| {
             ctx.line_to(x1, y2 - y3 / 2.);
         });
-        draw_ctx.arc_path(x1, y2 - y3, x1 + x3, y2, PI, PI * 0.5, false, true);
+        draw_ctx.arc_path(x1 + x3, y2 - y3, x3, y3, PI, PI * 0.5, false, true);
         draw_ctx.line_exec(true, |ctx| {
             ctx.line_to(x2 - x3 / 2., y2);
         });
-        draw_ctx.arc_path(x2 - x3, y2 - y3, x2, y2, PI * 0.5, 0., false, true);
+        draw_ctx.arc_path(x2 - x3, y2 - y3, x3, y3, PI * 0.5, 0., false, true);
         draw_ctx.line_exec(true, |ctx| {
             ctx.line_to(x2, y1 + y3 / 2.);
         });
-        draw_ctx.arc_path(x2 - x3, y1, x2, y1 + y3, 0., PI * -0.5, false, true);
+        draw_ctx.arc_path(x2 - x3, y1 + y3, x3, y3, 0., PI * -0.5, false, true);
         draw_ctx.line_exec(true, |ctx| {
             ctx.line_to(x1 + x3 / 2., y1);
         });
@@ -506,12 +462,12 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
             filename,
             Some(((x2 - x1).abs() as i32, (y2 - y1).abs() as i32)),
         )?;
+
         let surface = pixbuf
             .create_surface(1, self.window.window().as_ref())
             .ok_or_else(|| Error::SurfaceCreateError)?;
 
         let cr = cairo::Context::new(draw_ctx.surface.as_ref())?;
-
         cr.scale(
             if x1 < x2 { 1. } else { -1. },
             if y1 < y2 { 1. } else { -1. },
@@ -558,6 +514,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
             );
             draw_ctx.cr_background().fill()?;
         }
+
         if let ir::FontUnderline::Underline = draw_ctx.text_underline {
             draw_ctx.cr_text().move_to(x, y + font_extents.descent());
             draw_ctx.cr_text().rel_line_to(width, 0.);
@@ -567,8 +524,9 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         if let Some(width) = draw_ctx.text_width {
             let mut x = x;
             let orig_matrix = draw_ctx.cr_text().font_matrix();
-            for i in 0..text.len() {
-                let c = &text[i..=i];
+            for c in text.chars() {
+                let s = c.to_string();
+                let c = s.as_str();
                 let text_width = draw_ctx.cr_text().text_extents(c)?.width();
                 if text_width > 0. {
                     let mut matrix = orig_matrix;
@@ -591,7 +549,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
     fn message_box(
         &mut self,
         typ: crate::ir::MessageBoxType,
-        default_button: u16, //TODO
+        default_button: u16,
         icon: crate::ir::MessageBoxIcon,
         text: &str,
         caption: &str,
@@ -913,6 +871,9 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
             }
             ir::WaitMode::Focus => {
                 if let Some(_milliseconds) = milliseconds {
+                    while gtk::events_pending() {
+                        gtk::main_iteration();
+                    }
                     while !self.window.is_active() {
                         while gtk::events_pending() {
                             gtk::main_iteration();
@@ -1132,4 +1093,47 @@ fn menu_item_conv<'a>(
         input_ctx.menu.insert(key, label);
     }
     menu_item
+}
+
+fn pixbuf_from_bytes(
+    bytes: &[u8],
+    size: Option<(i32, i32)>,
+) -> Result<gdk::gdk_pixbuf::Pixbuf, Error> {
+    let loader = gdk_pixbuf::PixbufLoader::new();
+    if let Some((width, height)) = size {
+        loader.set_size(width, height);
+    }
+    loader.write(bytes)?;
+    loader.close()?;
+    loader.pixbuf().ok_or_else(|| Error::PixbufLoadError)
+}
+
+fn pixbuf_from_filename(
+    filename: &str,
+    size: Option<(i32, i32)>,
+) -> Result<gdk::gdk_pixbuf::Pixbuf, Error> {
+    match filename {
+        "C:\\WINDOWS\\BOXES.BMP" => pixbuf_from_bytes(include_bytes!("res/BOXES.BMP"), size),
+        "C:\\WINDOWS\\CHESS.BMP" => pixbuf_from_bytes(include_bytes!("res/CHESS.BMP"), size),
+        "C:\\WINDOWS\\PAPER.BMP" => pixbuf_from_bytes(include_bytes!("res/PAPER.BMP"), size),
+        "C:\\WINDOWS\\PARTY.BMP" => pixbuf_from_bytes(include_bytes!("res/PARTY.BMP"), size),
+        "C:\\WINDOWS\\PYRAMID.BMP" => pixbuf_from_bytes(include_bytes!("res/PYRAMID.BMP"), size),
+        "C:\\WINDOWS\\RIBBONS.BMP" => pixbuf_from_bytes(include_bytes!("res/RIBBONS.BMP"), size),
+        "C:\\WINDOWS\\WEAVE.BMP" => pixbuf_from_bytes(include_bytes!("res/WEAVE.BMP"), size),
+        filename => Ok(if let Some((width, height)) = size {
+            gdk_pixbuf::Pixbuf::from_file_at_size(filename, width, height)
+        } else {
+            gdk_pixbuf::Pixbuf::from_file(filename)
+        }?),
+    }
+}
+
+fn command_conv(command: &str) -> &str {
+    match command {
+        "NOTEPAD.EXE" => "mousepad",
+        "CALC.EXE" => "libreoffice --calc",
+        "WRITE.EXE" => "libreoffice --writer",
+        "C:\\COMMAND.COM" => "xterm",
+        command => command,
+    }
 }

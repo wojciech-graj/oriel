@@ -26,7 +26,10 @@ fn main() {
     }
 
     let src = {
-        let mut src = read_to_string(&args[1]).unwrap();
+        let mut src = match read_to_string(&args[1]) {
+            Ok(src) => src,
+            Err(e) => panic!("{}", e),
+        };
         src.push('\n');
         src
     };

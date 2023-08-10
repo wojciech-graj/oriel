@@ -340,21 +340,16 @@ impl DrawCtx {
 
     pub fn arc_path(
         &self,
-        x1: f64,
-        y1: f64,
-        x2: f64,
-        y2: f64,
+        cx: f64,
+        cy: f64,
+        sclx: f64,
+        scly: f64,
         theta1: f64,
         theta2: f64,
         mv: bool,
         brush: bool,
     ) -> (f64, f64) {
         const DTHETA: f64 = -0.1;
-
-        let sclx = (x2 - x1) / 2.;
-        let scly = (y2 - y1) / 2.;
-        let cx = (x2 + x1) / 2.;
-        let cy = (y2 + y1) / 2.;
 
         let startx = cx + sclx * theta1.cos();
         let starty = cy + scly * theta1.sin();
@@ -382,6 +377,27 @@ impl DrawCtx {
         });
 
         (startx, starty)
+    }
+
+    pub fn arc_path_rect_bound(
+        &self,
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        x3: f64,
+        y3: f64,
+        x4: f64,
+        y4: f64,
+        brush: bool,
+    ) -> (f64, f64) {
+        let sclx = (x2 - x1) / 2.;
+        let scly = (y2 - y1) / 2.;
+        let cx = (x2 + x1) / 2.;
+        let cy = (y2 + y1) / 2.;
+        let theta1 = ((y3 - cy) / scly).atan2((x3 - cx) / sclx);
+        let theta2 = ((y4 - cy) / scly).atan2((x4 - cx) / sclx);
+        self.arc_path(cx, cy, sclx, scly, theta1, theta2, true, brush)
     }
 
     pub fn draw(&self) -> Result<(), cairo::Error> {
