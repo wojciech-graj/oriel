@@ -10,7 +10,6 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-use std::cell::Ref;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::f64::consts::PI;
@@ -31,496 +30,16 @@ use crate::ir;
 use crate::vm;
 use crate::vm::VMSys;
 
-macro_rules! cairo_context_getter_and_invalidator {
-    ($var: ident, $member: ident, $var_inval:ident, $cr: expr) => {
-        fn $var(&self) -> Ref<cairo::Context> {
-            {
-                let borrowed = self.$member.borrow();
-                if let Some(_) = *borrowed {
-                    return Ref::map(borrowed, |cr| cr.as_ref().unwrap());
-                }
-            }
-            {
-                let mut borrowed = self.$member.borrow_mut();
-                let cr = cairo::Context::new(&self.surface).unwrap();
-                cr.set_antialias(cairo::Antialias::None);
-                *borrowed = Some(cr);
-            }
-            let borrowed = self.$member.borrow();
-            $cr(self, borrowed.as_ref().unwrap());
-            Ref::map(borrowed, |cr| cr.as_ref().unwrap())
-        }
-
-        fn $var_inval(&self) {
-            let mut borrowed = self.$member.borrow_mut();
-            *borrowed = None;
-        }
-    };
-}
-
-macro_rules! scale_vars {
-    ($draw_ctx:expr, ($($x:ident),*)) => {
-        $(
-            let $x = $draw_ctx.scaled($x);
-        )*
-    };
-}
-
-mod cairo_util {
-    use super::*;
-
-    pub fn new_surface_rgb(
-        width: i32,
-        height: i32,
-        r: f64,
-        g: f64,
-        b: f64,
-    ) -> Result<(cairo::ImageSurface, cairo::Context), cairo::Error> {
-        let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, width, height)?;
-        let cr = cairo::Context::new(&surface)?;
-        cr.set_source_rgb(r, g, b);
-        cr.paint()?;
-        Ok((surface, cr))
-    }
-
-    pub fn draw_pattern_diagonal_up(cr: &cairo::Context) {
-        cr.move_to(0.5, 8.);
-        cr.line_to(8., 0.5);
-    }
-
-    pub fn draw_pattern_diagonal_down(cr: &cairo::Context) {
-        cr.move_to(0., 0.5);
-        cr.line_to(7.5, 8.);
-    }
-
-    pub fn draw_pattern_horizontal(cr: &cairo::Context) {
-        cr.move_to(0., 0.);
-        cr.line_to(8., 0.);
-    }
-
-    pub fn draw_pattern_vertical(cr: &cairo::Context) {
-        cr.move_to(0., 0.);
-        cr.line_to(0., 8.);
-    }
-}
-
-struct DrawCtx {
-    surface: cairo::ImageSurface,
-    cr_text_: RefCell<Option<cairo::Context>>,
-    cr_pen_: RefCell<Option<cairo::Context>>,
-    cr_background_: RefCell<Option<cairo::Context>>,
-    cr_brush_: RefCell<Option<cairo::Context>>,
-
-    text_face: cairo::FontFace,
-    text_height_mul: Option<f64>,
-    text_width: Option<f64>,
-    text_underline: crate::ir::FontUnderline,
-    text_rgb: (f64, f64, f64),
-
-    pen_type: ir::PenType,
-    pen_width: f64,
-    pen_rgb: (f64, f64, f64),
-
-    background_transparency: ir::BackgroundTransparency,
-    background_rgb: (f64, f64, f64),
-
-    brush_type: ir::BrushType,
-    brush_rgb: (f64, f64, f64),
-
-    scale: f64,
-}
-
-impl DrawCtx {
-    fn new() -> Result<Self, cairo::Error> {
-        Ok(DrawCtx {
-            surface: cairo::ImageSurface::create(cairo::Format::ARgb32, 0, 0)?,
-            cr_text_: RefCell::new(None),
-            cr_pen_: RefCell::new(None),
-            cr_background_: RefCell::new(None),
-            cr_brush_: RefCell::new(None),
-
-            text_face: cairo::FontFace::toy_create(
-                "Sans",
-                cairo::FontSlant::Normal,
-                cairo::FontWeight::Normal,
-            )?,
-            text_height_mul: None,
-            text_width: None,
-            text_underline: ir::FontUnderline::NoUnderline,
-            text_rgb: (0., 0., 0.),
-
-            pen_type: ir::PenType::Solid,
-            pen_width: 1.,
-            pen_rgb: (0., 0., 0.),
-
-            background_transparency: ir::BackgroundTransparency::Opaque,
-            background_rgb: (1., 1., 1.),
-
-            brush_type: ir::BrushType::Null,
-            brush_rgb: (0., 0., 0.),
-
-            scale: 1.,
-        })
-    }
-
-    cairo_context_getter_and_invalidator!(
-        cr_text,
-        cr_text_,
-        cr_text_inval,
-        |draw_ctx: &DrawCtx, cr: &cairo::Context| {
-            let (r, g, b) = draw_ctx.text_rgb;
-            cr.set_font_face(&draw_ctx.text_face);
-            cr.set_source_rgb(r, g, b);
-            if let Some(height_mul) = draw_ctx.text_height_mul {
-                let mut mat = cairo::Matrix::identity();
-                mat.set_yy(height_mul);
-                cr.set_font_matrix(mat);
-            } else {
-                cr.set_font_size(18.);
-            }
-        }
-    );
-
-    cairo_context_getter_and_invalidator!(
-        cr_pen,
-        cr_pen_,
-        cr_pen_inval,
-        |draw_ctx: &DrawCtx, cr: &cairo::Context| {
-            let (r, g, b) = draw_ctx.pen_rgb;
-            cr.set_dash(
-                match draw_ctx.pen_type {
-                    ir::PenType::Solid => &[],
-                    ir::PenType::Null => &[0., 1.],
-                    ir::PenType::Dash => &[24., 8.],
-                    ir::PenType::Dot => &[4.],
-                    ir::PenType::DashDot => &[12., 6., 3., 6.],
-                    ir::PenType::DashDotDot => &[12., 3., 3., 3., 3., 3.],
-                },
-                0.,
-            );
-            cr.set_line_width(draw_ctx.pen_width);
-            cr.set_source_rgb(r, g, b);
-        }
-    );
-
-    cairo_context_getter_and_invalidator!(
-        cr_background,
-        cr_background_,
-        cr_background_inval,
-        |draw_ctx: &DrawCtx, cr: &cairo::Context| {
-            let (r, g, b) = draw_ctx.background_rgb;
-            cr.set_line_width(draw_ctx.pen_width);
-            cr.set_source_rgb(r, g, b);
-        }
-    );
-
-    cairo_context_getter_and_invalidator!(
-        cr_brush,
-        cr_brush_,
-        cr_brush_inval,
-        |draw_ctx: &DrawCtx, cr: &cairo::Context| {
-            let (r, g, b) = draw_ctx.brush_rgb;
-            let pattern = cairo::SurfacePattern::create(match draw_ctx.brush_type {
-                ir::BrushType::Solid => cairo_util::new_surface_rgb(1, 1, r, g, b).unwrap().0,
-                ir::BrushType::DiagonalUp => {
-                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
-                    cr.set_antialias(cairo::Antialias::None);
-                    cr.set_source_rgb(r, g, b);
-                    cairo_util::draw_pattern_diagonal_up(&cr);
-                    cr.rectangle(0., 0., 0.5, 0.5);
-                    cr.stroke().ok();
-                    surface
-                }
-                ir::BrushType::DiagonalDown => {
-                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
-                    cr.set_antialias(cairo::Antialias::None);
-                    cr.set_source_rgb(r, g, b);
-                    cairo_util::draw_pattern_diagonal_down(&cr);
-                    cr.rectangle(8., 0., 0.5, 0.5);
-                    cr.stroke().ok();
-                    surface
-                }
-                ir::BrushType::DiagonalCross => {
-                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
-                    cr.set_antialias(cairo::Antialias::None);
-                    cr.set_source_rgb(r, g, b);
-                    cairo_util::draw_pattern_diagonal_up(&cr);
-                    cairo_util::draw_pattern_diagonal_down(&cr);
-                    cr.stroke().ok();
-                    surface
-                }
-                ir::BrushType::Horizontal => {
-                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
-                    cr.set_antialias(cairo::Antialias::None);
-                    cr.set_source_rgb(r, g, b);
-                    cairo_util::draw_pattern_horizontal(&cr);
-                    cr.stroke().ok();
-                    surface
-                }
-                ir::BrushType::Vertical => {
-                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
-                    cr.set_antialias(cairo::Antialias::None);
-                    cr.set_source_rgb(r, g, b);
-                    cairo_util::draw_pattern_vertical(&cr);
-                    cr.stroke().ok();
-                    surface
-                }
-                ir::BrushType::Cross => {
-                    let (surface, cr) = draw_ctx.create_pattern_surface(8, 8).unwrap();
-                    cr.set_antialias(cairo::Antialias::None);
-                    cr.set_source_rgb(r, g, b);
-                    cairo_util::draw_pattern_horizontal(&cr);
-                    cairo_util::draw_pattern_vertical(&cr);
-                    cr.stroke().ok();
-                    surface
-                }
-                ir::BrushType::Null => {
-                    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, 1, 1).unwrap();
-                    let cr = cairo::Context::new(&surface).unwrap();
-                    cr.set_source_rgba(0., 0., 0., 0.);
-                    cr.paint().ok();
-                    surface
-                }
-            });
-            pattern.set_extend(cairo::Extend::Repeat);
-            cr.set_source(pattern).ok();
-        }
-    );
-
-    fn create_pattern_surface(
-        &self,
-        width: i32,
-        height: i32,
-    ) -> Result<(cairo::ImageSurface, cairo::Context), cairo::Error> {
-        if let ir::BackgroundTransparency::Opaque = self.background_transparency {
-            let surface = cairo::ImageSurface::create(cairo::Format::Rgb24, width, height)?;
-            let cr = cairo::Context::new(&surface)?;
-            let (r, g, b) = self.background_rgb;
-            cr.set_source_rgb(r, g, b);
-            cr.paint().ok();
-            Ok((surface, cr))
-        } else {
-            let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, width, height)?;
-            let cr = cairo::Context::new(&surface)?;
-            Ok((surface, cr))
-        }
-    }
-
-    fn resize(&mut self, width: i32, height: i32) -> Result<(), cairo::Error> {
-        self.surface = {
-            let (surface, cr) = cairo_util::new_surface_rgb(
-                width,
-                height,
-                self.background_rgb.0,
-                self.background_rgb.1,
-                self.background_rgb.2,
-            )?;
-            cr.set_source_surface(&self.surface, 0., 0.)?;
-            cr.paint()?;
-            surface
-        };
-        *self.cr_text_.borrow_mut() = None;
-        *self.cr_pen_.borrow_mut() = None;
-        *self.cr_background_.borrow_mut() = None;
-        *self.cr_brush_.borrow_mut() = None;
-        Ok(())
-    }
-
-    fn scaled(&self, x: u16) -> f64 {
-        (x as f64) * self.scale
-    }
-
-    fn line_exec(&self, brush: bool, op: impl Fn(Ref<cairo::Context>)) {
-        if brush {
-            match self.brush_type {
-                ir::BrushType::Solid
-                | ir::BrushType::DiagonalUp
-                | ir::BrushType::DiagonalDown
-                | ir::BrushType::DiagonalCross
-                | ir::BrushType::Horizontal
-                | ir::BrushType::Vertical
-                | ir::BrushType::Cross => {
-                    op(self.cr_brush());
-                }
-                ir::BrushType::Null => {}
-            }
-        }
-        match self.background_transparency {
-            ir::BackgroundTransparency::Opaque => {
-                op(self.cr_background());
-            }
-            ir::BackgroundTransparency::Transparent => {}
-        }
-        match self.pen_type {
-            ir::PenType::Solid
-            | ir::PenType::Dash
-            | ir::PenType::Dot
-            | ir::PenType::DashDot
-            | ir::PenType::DashDotDot => {
-                op(self.cr_pen());
-            }
-            ir::PenType::Null => {}
-        }
-    }
-
-    fn arc_path(
-        &self,
-        x1: f64,
-        y1: f64,
-        x2: f64,
-        y2: f64,
-        theta1: f64,
-        theta2: f64,
-        mv: bool,
-        brush: bool,
-    ) -> (f64, f64) {
-        const DTHETA: f64 = -0.1;
-
-        let sclx = (x2 - x1) / 2.;
-        let scly = (y2 - y1) / 2.;
-        let cx = (x2 + x1) / 2.;
-        let cy = (y2 + y1) / 2.;
-
-        let startx = cx + sclx * theta1.cos();
-        let starty = cy + scly * theta1.sin();
-        let endx = cx + sclx * theta2.cos();
-        let endy = cy + scly * theta2.sin();
-
-        if mv {
-            self.line_exec(brush, |ctx| {
-                ctx.move_to(startx, starty);
-            });
-        }
-        let mut theta = if theta1 > theta2 {
-            theta1
-        } else {
-            theta1 + TAU
-        };
-        while theta > theta2 {
-            self.line_exec(brush, |ctx| {
-                ctx.line_to(cx + sclx * theta.cos(), cy + scly * theta.sin());
-            });
-            theta += DTHETA;
-        }
-        self.line_exec(brush, |ctx| {
-            ctx.line_to(endx, endy);
-        });
-
-        (startx, starty)
-    }
-
-    fn draw(&self) -> Result<(), cairo::Error> {
-        self.cr_brush().fill()?;
-        self.cr_background().stroke()?;
-        self.cr_pen().stroke()?;
-        Ok(())
-    }
-
-    fn stroke(&self) -> Result<(), cairo::Error> {
-        self.cr_background().stroke()?;
-        self.cr_pen().stroke()?;
-        Ok(())
-    }
-}
-
-struct MouseRegion<'a> {
-    x1: f64,
-    y1: f64,
-    x2: f64,
-    y2: f64,
-    callbacks: &'a ir::MouseCallbacks<'a>,
-}
-
-impl<'a> MouseRegion<'a> {
-    fn contains(&self, x: f64, y: f64) -> bool {
-        self.x1 <= x && self.y1 < y && self.x2 >= x && self.y2 >= y
-    }
-}
-
-struct InputQueue {
-    keyboard: Vec<vm::Key>,
-    mouse: Vec<(f64, f64)>,
-    menu: Vec<usize>,
-    closed: bool,
-}
-
-impl InputQueue {
-    fn new() -> Self {
-        InputQueue {
-            keyboard: Vec::new(),
-            mouse: Vec::new(),
-            menu: Vec::new(),
-            closed: false,
-        }
-    }
-
-    fn clear(&mut self) {
-        self.keyboard = Vec::new();
-        self.mouse = Vec::new();
-        self.menu = Vec::new();
-    }
-}
-
-struct InputCtx<'a> {
-    keyboard: HashMap<vm::Key, ir::Identifier<'a>>,
-    mouse: Vec<MouseRegion<'a>>,
-    menu: HashMap<usize, ir::Identifier<'a>>,
-    queue: Rc<RefCell<InputQueue>>,
-}
-
-impl<'a> InputCtx<'a> {
-    fn new() -> Self {
-        InputCtx {
-            keyboard: HashMap::new(),
-            mouse: Vec::new(),
-            menu: HashMap::new(),
-            queue: Rc::new(RefCell::new(InputQueue::new())),
-        }
-    }
-
-    fn clear_queue(&self) {
-        self.queue.borrow_mut().clear();
-    }
-
-    fn process_queue(&self, scale: f64) -> Option<vm::Input<'a>> {
-        {
-            let queue = self.queue.borrow();
-            if queue.closed {
-                return Some(vm::Input::End);
-            }
-            for key in queue.keyboard.iter() {
-                if let Some(&label) = self.keyboard.get(key) {
-                    return Some(vm::Input::Goto(label));
-                }
-            }
-            for mouse in queue.mouse.iter() {
-                for region in self.mouse.iter() {
-                    if region.contains(mouse.0, mouse.1) {
-                        return Some(vm::Input::Mouse {
-                            callbacks: region.callbacks,
-                            x: (mouse.0 / scale) as u16,
-                            y: (mouse.1 / scale) as u16,
-                        });
-                    }
-                }
-            }
-            for menu in queue.menu.iter() {
-                if let Some(&label) = self.menu.get(menu) {
-                    return Some(vm::Input::Goto(label));
-                }
-            }
-        }
-        self.clear_queue();
-        None
-    }
-}
+#[macro_use]
+mod draw;
+mod input;
 
 pub struct VMSysGtk<'a> {
     window: gtk::Window,
     help: gtk::MenuItem,
     menu_bar: gtk::MenuBar,
-    draw_ctx: Rc<RefCell<DrawCtx>>,
-    input_ctx: InputCtx<'a>,
+    draw_ctx: Rc<RefCell<draw::DrawCtx>>,
+    input_ctx: input::InputCtx<'a>,
     wait_mode: ir::WaitMode,
 }
 
@@ -530,7 +49,7 @@ impl<'a> VMSysGtk<'a> {
 
         let window = gtk::Window::new(gtk::WindowType::Toplevel);
         window.set_default_size(800, 600);
-        window.set_title(format!("Oriel - {}", filename).as_str());
+        window.set_title(format!("Oriel - {filename}").as_str());
         let logo = pixbuf_from_bytes(include_bytes!("res/LOGO.png"), None)?;
         window.set_icon(Some(&logo));
 
@@ -573,7 +92,7 @@ impl<'a> VMSysGtk<'a> {
         let drawing_area = gtk::DrawingArea::new();
         mainbox.pack_start(&drawing_area, true, true, 0);
 
-        let draw_ctx = Rc::new(RefCell::new(DrawCtx::new()?));
+        let draw_ctx = Rc::new(RefCell::new(draw::DrawCtx::new()?));
 
         let draw_ctx_clone = draw_ctx.clone();
         drawing_area.connect_draw(move |_, cr| {
@@ -592,7 +111,7 @@ impl<'a> VMSysGtk<'a> {
                 .ok();
         });
 
-        let input_ctx = InputCtx::new();
+        let input_ctx = input::InputCtx::new();
 
         let queue_clone = input_ctx.queue.clone();
         window.connect_key_press_event(move |_, event_key| {
@@ -1001,12 +520,12 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
             if x1 < x2 {
                 x1.min(x2)
             } else {
-                (pixbuf.width()) as f64 - x1.min(x2)
+                f64::from(pixbuf.width()) - x1.min(x2)
             },
             if y1 < y2 {
                 y1.min(y2)
             } else {
-                (-pixbuf.height()) as f64 - y1.min(y2)
+                f64::from(-pixbuf.height()) - y1.min(y2)
             },
         );
         cr.set_source_surface(&surface, 0., 0.)?;
@@ -1154,10 +673,10 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                         category.members.iter().for_each(|member| {
                             match member {
                                 ir::MenuMember::Item(subitem) => {
-                                    submenu.append(&menu_item_conv(subitem, &mut self.input_ctx))
+                                    submenu.append(&menu_item_conv(subitem, &mut self.input_ctx));
                                 }
                                 ir::MenuMember::Separator => {
-                                    submenu.append(&gtk::SeparatorMenuItem::new())
+                                    submenu.append(&gtk::SeparatorMenuItem::new());
                                 }
                             };
                         });
@@ -1180,7 +699,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         let draw_ctx = self.draw_ctx.borrow();
         self.input_ctx.mouse = regions
             .iter()
-            .map(|region| MouseRegion {
+            .map(|region| input::MouseRegion {
                 x1: draw_ctx.scaled(region.x1),
                 y1: draw_ctx.scaled(region.y1),
                 x2: draw_ctx.scaled(region.x2),
@@ -1226,7 +745,11 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
         draw_ctx.background_transparency = option;
-        draw_ctx.background_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
+        draw_ctx.background_rgb = (
+            f64::from(r) / 255.,
+            f64::from(g) / 255.,
+            f64::from(b) / 255.,
+        );
         draw_ctx.cr_background_inval();
         draw_ctx.cr_brush_inval();
         Ok(())
@@ -1241,7 +764,11 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut draw_ctx = self.draw_ctx.borrow_mut();
         draw_ctx.brush_type = option;
-        draw_ctx.brush_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
+        draw_ctx.brush_rgb = (
+            f64::from(r) / 255.,
+            f64::from(g) / 255.,
+            f64::from(b) / 255.,
+        );
         draw_ctx.cr_brush_inval();
         Ok(())
     }
@@ -1268,7 +795,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                     .display()
                     .monitor_at_window(&window_gdk)
                     .ok_or_else(|| Error::MonitorMissingError)?;
-                (monitor.geometry().width() as f64) / (monitor.width_mm() as f64)
+                f64::from(monitor.geometry().width()) / f64::from(monitor.width_mm())
             }
         };
         Ok(())
@@ -1303,21 +830,25 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         )?;
 
         draw_ctx.text_face = font_face;
-        draw_ctx.text_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
+        draw_ctx.text_rgb = (
+            f64::from(r) / 255.,
+            f64::from(g) / 255.,
+            f64::from(b) / 255.,
+        );
 
-        draw_ctx.text_width = if width != 0 {
-            Some(draw_ctx.scaled(width))
-        } else {
+        draw_ctx.text_width = if width == 0 {
             None
+        } else {
+            Some(draw_ctx.scaled(width))
         };
 
-        draw_ctx.text_height_mul = if height != 0 {
+        draw_ctx.text_height_mul = if height == 0 {
+            None
+        } else {
             draw_ctx.text_height_mul = Some(1.);
             draw_ctx.cr_text_inval();
             let font_extents = draw_ctx.cr_text().font_extents()?;
             Some(draw_ctx.scaled(height) / font_extents.height())
-        } else {
-            None
         };
 
         draw_ctx.cr_text_inval();
@@ -1336,7 +867,11 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         draw_ctx.pen_type = option;
         draw_ctx.pen_width = width.into();
-        draw_ctx.pen_rgb = ((r as f64) / 255., (g as f64) / 255., (b as f64) / 255.);
+        draw_ctx.pen_rgb = (
+            f64::from(r) / 255.,
+            f64::from(g) / 255.,
+            f64::from(b) / 255.,
+        );
         draw_ctx.cr_pen_inval();
         draw_ctx.cr_background_inval();
         Ok(())
@@ -1581,7 +1116,10 @@ fn eventkey_conv(event: &gdk::EventKey) -> Vec<vm::Key> {
     }
 }
 
-fn menu_item_conv<'a>(item: &ir::MenuItem<'a>, input_ctx: &mut InputCtx<'a>) -> gtk::MenuItem {
+fn menu_item_conv<'a>(
+    item: &ir::MenuItem<'a>,
+    input_ctx: &mut input::InputCtx<'a>,
+) -> gtk::MenuItem {
     let menu_item = if item.name.contains('&') {
         gtk::MenuItem::with_mnemonic(&item.name.replace('&', "_"))
     } else {

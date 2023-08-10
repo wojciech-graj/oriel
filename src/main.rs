@@ -31,7 +31,7 @@ fn main() {
         src
     };
 
-    let prog = match parse::parse(&src) {
+    let prog = match ir::Program::from_src(&src) {
         Ok(prog) => prog,
         Err(e) => panic!("{}", e),
     };

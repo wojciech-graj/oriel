@@ -274,7 +274,7 @@ impl<'a> VM<'a> {
     fn get_integer(&self, i: ir::Integer) -> Option<u16> {
         match i {
             ir::Integer::Literal(val) => Some(val),
-            ir::Integer::Variable(ref ident) => self.vars.get(ident).cloned(),
+            ir::Integer::Variable(ref ident) => self.vars.get(ident).copied(),
         }
     }
 
@@ -454,7 +454,7 @@ impl<'a> VM<'a> {
                 self.ip = self
                     .call_stack
                     .pop()
-                    .ok_or_else(|| Error::CallStackExhaustedError)?
+                    .ok_or_else(|| Error::CallStackExhaustedError)?;
             }
             ir::Command::Goto(ref ident) => self.ip = *(self.program.labels.get(ident).unwrap()),
             ir::Command::If {
@@ -463,10 +463,10 @@ impl<'a> VM<'a> {
                 i2,
                 goto_false,
             } => {
-                self.ip = if !op.cmp(integer_value!(self, i1)?, integer_value!(self, i2)?) {
-                    goto_false
-                } else {
+                self.ip = if op.cmp(integer_value!(self, i1)?, integer_value!(self, i2)?) {
                     self.ip + 1
+                } else {
+                    goto_false
                 }
             }
             ir::Command::MessageBox {
@@ -560,7 +560,7 @@ impl<'a> VM<'a> {
             ),
             ir::Command::UseCaption(text) => incr_ip!(self, self.ctx.use_caption(text)?),
             ir::Command::UseCoordinates(coordinates) => {
-                incr_ip!(self, self.ctx.use_coordinates(coordinates)?)
+                incr_ip!(self, self.ctx.use_coordinates(coordinates)?);
             }
             ir::Command::UseFont {
                 name,

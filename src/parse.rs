@@ -20,7 +20,11 @@ use pest_derive::Parser;
 
 use thiserror::Error;
 
-use crate::ir::*;
+use crate::ir::{
+    self, BackgroundTransparency, BrushType, Coordinates, FontSlant, FontUnderline, FontWeight,
+    LogicalOperator, MathOperator, MessageBoxIcon, MessageBoxType, PenType, SetWindowOption,
+    WaitMode,
+};
 
 #[derive(Parser)]
 #[grammar = "oriel.pest"]
@@ -74,7 +78,7 @@ fn next_pair_str_lit<'a>(pairs: &mut Pairs<'a, Rule>) -> Result<&'a str, Error<'
 
 fn next_pair_set_menu_label<'a>(
     pairs: &mut Pairs<'a, Rule>,
-) -> Result<Option<Identifier<'a>>, Error<'a>> {
+) -> Result<Option<ir::Identifier<'a>>, Error<'a>> {
     let pair = pairs.next().ok_or_else(|| Error::MissingArgError)?;
     Ok(match pair.as_str() {
         "IGNORE" => None,
@@ -166,7 +170,7 @@ enum_impl_from_str!(
     (NoUnderline, "NOUNDERLINE")
 );
 
-impl<'a> TryFrom<&Pair<'a, Rule>> for PhysicalKey {
+impl<'a> TryFrom<&Pair<'a, Rule>> for ir::PhysicalKey {
     type Error = Error<'a>;
 
     fn try_from(value: &Pair<'a, Rule>) -> Result<Self, Self::Error> {
@@ -180,7 +184,7 @@ impl<'a> TryFrom<&Pair<'a, Rule>> for PhysicalKey {
                 {
                     Err(Error::InvalidPhysicalKeyError(s))
                 } else {
-                    Ok(PhysicalKey {
+                    Ok(ir::PhysicalKey {
                         chr: c,
                         ctrl: len == 4,
                     })
@@ -191,41 +195,41 @@ impl<'a> TryFrom<&Pair<'a, Rule>> for PhysicalKey {
     }
 }
 
-impl<'a> TryFrom<&Pair<'a, Rule>> for Key<'a> {
+impl<'a> TryFrom<&Pair<'a, Rule>> for ir::Key<'a> {
     type Error = Error<'a>;
 
     fn try_from(value: &Pair<'a, Rule>) -> Result<Self, Self::Error> {
         match value.as_rule() {
-            Rule::identifier | Rule::integer => Ok(Key::Virtual(value.try_into()?)),
-            Rule::string => Ok(Key::Physical(value.try_into()?)),
+            Rule::identifier | Rule::integer => Ok(ir::Key::Virtual(value.try_into()?)),
+            Rule::string => Ok(ir::Key::Physical(value.try_into()?)),
             _ => Err(Error::ArgTypeError(value.into(), value.as_str())),
         }
     }
 }
 
-impl<'a> TryFrom<&Pair<'a, Rule>> for Identifier<'a> {
+impl<'a> TryFrom<&Pair<'a, Rule>> for ir::Identifier<'a> {
     type Error = Error<'a>;
 
     fn try_from(value: &Pair<'a, Rule>) -> Result<Self, Self::Error> {
         if let Rule::identifier = value.as_rule() {
-            Ok(Identifier(value.as_str()))
+            Ok(ir::Identifier(value.as_str()))
         } else {
             Err(Error::ArgTypeError(value.into(), value.as_str()))
         }
     }
 }
 
-impl<'a> TryFrom<&Pair<'a, Rule>> for Integer<'a> {
+impl<'a> TryFrom<&Pair<'a, Rule>> for ir::Integer<'a> {
     type Error = Error<'a>;
 
-    fn try_from(pair: &Pair<'a, Rule>) -> Result<Integer<'a>, Self::Error> {
+    fn try_from(pair: &Pair<'a, Rule>) -> Result<ir::Integer<'a>, Self::Error> {
         match pair.as_rule() {
             Rule::integer => {
-                Ok(Integer::Literal(pair.as_str().parse::<u16>().map_err(
+                Ok(ir::Integer::Literal(pair.as_str().parse::<u16>().map_err(
                     |_| Self::Error::ParseIntError(pair.into(), pair.as_str()),
                 )?))
             }
-            Rule::identifier => Ok(Integer::Variable(Identifier(pair.as_str()))),
+            Rule::identifier => Ok(ir::Integer::Variable(ir::Identifier(pair.as_str()))),
             _ => Err(Error::ArgTypeError(pair.into(), pair.as_str())),
         }
     }
@@ -277,21 +281,21 @@ impl From<pest::error::Error<Rule>> for Error<'_> {
     }
 }
 
-impl<'a> Command<'a> {
-    fn from_keyword(command: &Pair<'a, Rule>) -> Command<'a> {
+impl<'a> ir::Command<'a> {
+    fn from_keyword(command: &Pair<'a, Rule>) -> ir::Command<'a> {
         match command.as_str().to_lowercase().as_str() {
-            "beep" => Command::Beep,
-            "drawbackground" => Command::DrawBackground,
-            "end" => Command::End,
-            "return" => Command::Return,
+            "beep" => ir::Command::Beep,
+            "drawbackground" => ir::Command::DrawBackground,
+            "end" => ir::Command::End,
+            "return" => ir::Command::Return,
             _ => unreachable!(),
         }
     }
 
-    fn try_from_func(kwords: &mut Pairs<'a, Rule>) -> Result<Command<'a>, Error<'a>> {
+    fn try_from_func(kwords: &mut Pairs<'a, Rule>) -> Result<ir::Command<'a>, Error<'a>> {
         let fname = next_pair_unchecked!(kwords).as_str();
         let command = match fname.to_lowercase().as_str() {
-            "drawarc" => Command::DrawArc {
+            "drawarc" => ir::Command::DrawArc {
                 x1: next_pair!(kwords)?.try_into()?,
                 y1: next_pair!(kwords)?.try_into()?,
                 x2: next_pair!(kwords)?.try_into()?,
@@ -301,12 +305,12 @@ impl<'a> Command<'a> {
                 x4: next_pair!(kwords)?.try_into()?,
                 y4: next_pair!(kwords)?.try_into()?,
             },
-            "drawbitmap" => Command::DrawBitmap {
+            "drawbitmap" => ir::Command::DrawBitmap {
                 x: next_pair!(kwords)?.try_into()?,
                 y: next_pair!(kwords)?.try_into()?,
                 filename: next_pair_str_lit(kwords)?,
             },
-            "drawchord" => Command::DrawChord {
+            "drawchord" => ir::Command::DrawChord {
                 x1: next_pair!(kwords)?.try_into()?,
                 y1: next_pair!(kwords)?.try_into()?,
                 x2: next_pair!(kwords)?.try_into()?,
@@ -316,31 +320,31 @@ impl<'a> Command<'a> {
                 x4: next_pair!(kwords)?.try_into()?,
                 y4: next_pair!(kwords)?.try_into()?,
             },
-            "drawellipse" => Command::DrawEllipse {
+            "drawellipse" => ir::Command::DrawEllipse {
                 x1: next_pair!(kwords)?.try_into()?,
                 y1: next_pair!(kwords)?.try_into()?,
                 x2: next_pair!(kwords)?.try_into()?,
                 y2: next_pair!(kwords)?.try_into()?,
             },
-            "drawflood" => Command::DrawFlood {
+            "drawflood" => ir::Command::DrawFlood {
                 x: next_pair!(kwords)?.try_into()?,
                 y: next_pair!(kwords)?.try_into()?,
                 r: next_pair!(kwords)?.try_into()?,
                 g: next_pair!(kwords)?.try_into()?,
                 b: next_pair!(kwords)?.try_into()?,
             },
-            "drawline" => Command::DrawLine {
+            "drawline" => ir::Command::DrawLine {
                 x1: next_pair!(kwords)?.try_into()?,
                 y1: next_pair!(kwords)?.try_into()?,
                 x2: next_pair!(kwords)?.try_into()?,
                 y2: next_pair!(kwords)?.try_into()?,
             },
-            "drawnumber" => Command::DrawNumber {
+            "drawnumber" => ir::Command::DrawNumber {
                 x: next_pair!(kwords)?.try_into()?,
                 y: next_pair!(kwords)?.try_into()?,
                 n: next_pair!(kwords)?.try_into()?,
             },
-            "drawpie" => Command::DrawPie {
+            "drawpie" => ir::Command::DrawPie {
                 x1: next_pair!(kwords)?.try_into()?,
                 y1: next_pair!(kwords)?.try_into()?,
                 x2: next_pair!(kwords)?.try_into()?,
@@ -350,13 +354,13 @@ impl<'a> Command<'a> {
                 x4: next_pair!(kwords)?.try_into()?,
                 y4: next_pair!(kwords)?.try_into()?,
             },
-            "drawrectangle" => Command::DrawRectangle {
+            "drawrectangle" => ir::Command::DrawRectangle {
                 x1: next_pair!(kwords)?.try_into()?,
                 y1: next_pair!(kwords)?.try_into()?,
                 x2: next_pair!(kwords)?.try_into()?,
                 y2: next_pair!(kwords)?.try_into()?,
             },
-            "drawroundrectangle" => Command::DrawRoundRectangle {
+            "drawroundrectangle" => ir::Command::DrawRoundRectangle {
                 x1: next_pair!(kwords)?.try_into()?,
                 y1: next_pair!(kwords)?.try_into()?,
                 x2: next_pair!(kwords)?.try_into()?,
@@ -364,19 +368,19 @@ impl<'a> Command<'a> {
                 x3: next_pair!(kwords)?.try_into()?,
                 y3: next_pair!(kwords)?.try_into()?,
             },
-            "drawsizedbitmap" => Command::DrawSizedBitmap {
+            "drawsizedbitmap" => ir::Command::DrawSizedBitmap {
                 x1: next_pair!(kwords)?.try_into()?,
                 y1: next_pair!(kwords)?.try_into()?,
                 x2: next_pair!(kwords)?.try_into()?,
                 y2: next_pair!(kwords)?.try_into()?,
                 filename: next_pair_str_lit(kwords)?,
             },
-            "drawtext" => Command::DrawText {
+            "drawtext" => ir::Command::DrawText {
                 x: next_pair!(kwords)?.try_into()?,
                 y: next_pair!(kwords)?.try_into()?,
                 text: next_pair_str_lit(kwords)?,
             },
-            "messagebox" => Command::MessageBox {
+            "messagebox" => ir::Command::MessageBox {
                 typ: next_pair!(kwords)?.try_into()?,
                 default_button: next_pair!(kwords)?.try_into()?,
                 icon: next_pair!(kwords)?.try_into()?,
@@ -384,9 +388,9 @@ impl<'a> Command<'a> {
                 caption: next_pair_str_lit(kwords)?,
                 button_pushed: next_pair!(kwords)?.try_into()?,
             },
-            "run" => Command::Run(next_pair_str_lit(kwords)?),
-            "setkeyboard" => Command::SetKeyboard({
-                let mut params: HashMap<Key, Identifier> = HashMap::new();
+            "run" => ir::Command::Run(next_pair_str_lit(kwords)?),
+            "setkeyboard" => ir::Command::SetKeyboard({
+                let mut params: HashMap<ir::Key, ir::Identifier> = HashMap::new();
                 while kwords.peek().is_some() {
                     params.insert(
                         next_pair!(kwords)?.try_into()?,
@@ -396,10 +400,10 @@ impl<'a> Command<'a> {
                 params
             }),
             "setmenu" => {
-                let mut items: Vec<MenuCategory> = Vec::new();
+                let mut items: Vec<ir::MenuCategory> = Vec::new();
                 while kwords.peek().is_some() {
-                    items.push(MenuCategory {
-                        item: MenuItem {
+                    items.push(ir::MenuCategory {
+                        item: ir::MenuItem {
                             name: next_pair_str_lit(kwords)?,
                             label: next_pair_set_menu_label(kwords)?,
                         },
@@ -409,30 +413,30 @@ impl<'a> Command<'a> {
                                 let pair = kwords.next().ok_or_else(|| Error::MissingArgError)?;
                                 members.push(match pair.as_str() {
                                     "ENDPOPUP" => break,
-                                    "SEPARATOR" => MenuMember::Separator,
-                                    s => MenuMember::Item(MenuItem {
+                                    "SEPARATOR" => ir::MenuMember::Separator,
+                                    s => ir::MenuMember::Item(ir::MenuItem {
                                         name: str_lit_parse(s).ok_or_else(|| {
                                             Error::ArgTypeError((&pair).into(), pair.as_str())
                                         })?,
                                         label: next_pair_set_menu_label(kwords)?,
                                     }),
-                                })
+                                });
                             }
                             members
                         },
                     });
                 }
-                Command::SetMenu(items)
+                ir::Command::SetMenu(items)
             }
-            "setmouse" => Command::SetMouse({
-                let mut params: Vec<MouseRegion> = Vec::new();
+            "setmouse" => ir::Command::SetMouse({
+                let mut params: Vec<ir::MouseRegion> = Vec::new();
                 while kwords.peek().is_some() {
-                    params.push(MouseRegion {
+                    params.push(ir::MouseRegion {
                         x1: next_pair!(kwords)?.try_into()?,
                         y1: next_pair!(kwords)?.try_into()?,
                         x2: next_pair!(kwords)?.try_into()?,
                         y2: next_pair!(kwords)?.try_into()?,
-                        callbacks: MouseCallbacks {
+                        callbacks: ir::MouseCallbacks {
                             label: next_pair!(kwords)?.try_into()?,
                             x: next_pair!(kwords)?.try_into()?,
                             y: next_pair!(kwords)?.try_into()?,
@@ -441,23 +445,23 @@ impl<'a> Command<'a> {
                 }
                 params
             }),
-            "setwaitmode" => Command::SetWaitMode(next_pair!(kwords)?.try_into()?),
-            "setwindow" => Command::SetWindow(next_pair!(kwords)?.try_into()?),
-            "usebackground" => Command::UseBackground {
+            "setwaitmode" => ir::Command::SetWaitMode(next_pair!(kwords)?.try_into()?),
+            "setwindow" => ir::Command::SetWindow(next_pair!(kwords)?.try_into()?),
+            "usebackground" => ir::Command::UseBackground {
                 option: next_pair!(kwords)?.try_into()?,
                 r: next_pair!(kwords)?.try_into()?,
                 g: next_pair!(kwords)?.try_into()?,
                 b: next_pair!(kwords)?.try_into()?,
             },
-            "usebrush" => Command::UseBrush {
+            "usebrush" => ir::Command::UseBrush {
                 option: next_pair!(kwords)?.try_into()?,
                 r: next_pair!(kwords)?.try_into()?,
                 g: next_pair!(kwords)?.try_into()?,
                 b: next_pair!(kwords)?.try_into()?,
             },
-            "usecaption" => Command::UseCaption(next_pair_str_lit(kwords)?),
-            "usecoordinates" => Command::UseCoordinates(next_pair!(kwords)?.try_into()?),
-            "usefont" => Command::UseFont {
+            "usecaption" => ir::Command::UseCaption(next_pair_str_lit(kwords)?),
+            "usecoordinates" => ir::Command::UseCoordinates(next_pair!(kwords)?.try_into()?),
+            "usefont" => ir::Command::UseFont {
                 name: next_pair_str_lit(kwords)?,
                 width: next_pair!(kwords)?.try_into()?,
                 height: next_pair!(kwords)?.try_into()?,
@@ -468,14 +472,14 @@ impl<'a> Command<'a> {
                 g: next_pair!(kwords)?.try_into()?,
                 b: next_pair!(kwords)?.try_into()?,
             },
-            "usepen" => Command::UsePen {
+            "usepen" => ir::Command::UsePen {
                 option: next_pair!(kwords)?.try_into()?,
                 width: next_pair!(kwords)?.try_into()?,
                 r: next_pair!(kwords)?.try_into()?,
                 g: next_pair!(kwords)?.try_into()?,
                 b: next_pair!(kwords)?.try_into()?,
             },
-            "waitinput" => Command::WaitInput(if let Some(ref milliseconds) = kwords.next() {
+            "waitinput" => ir::Command::WaitInput(if let Some(ref milliseconds) = kwords.next() {
                 Some(milliseconds.try_into()?)
             } else {
                 None
@@ -491,91 +495,96 @@ impl<'a> Command<'a> {
     }
 }
 
-pub fn parse(src: &str) -> Result<Program<'_>, Error> {
-    let mut pairs = OrielParser::parse(Rule::program, src)?;
+impl<'a> ir::Program<'a> {
+    pub fn from_src(src: &'a str) -> Result<Self, Error> {
+        let mut pairs = OrielParser::parse(Rule::program, src)?;
 
-    let mut prog = Program {
-        commands: Vec::new(),
-        labels: HashMap::new(),
-    };
+        let mut prog = ir::Program {
+            commands: Vec::new(),
+            labels: HashMap::new(),
+        };
 
-    for command_group in pairs.next().unwrap().into_inner() {
-        let mut if_indices: Vec<usize> = Vec::new();
-        for command in command_group.into_inner() {
-            for command_part in command.into_inner() {
-                match command_part.as_rule() {
-                    Rule::kword_command_nfunc => {
-                        prog.commands.push(Command::from_keyword(&command_part));
-                    }
-                    Rule::command_func => prog
-                        .commands
-                        .push(Command::try_from_func(&mut command_part.into_inner())?),
-                    Rule::command_goto => {
-                        prog.commands.push(Command::Goto(
-                            next_pair_unchecked!(command_part.into_inner()).try_into()?,
-                        ));
-                    }
-                    Rule::command_gosub => {
-                        prog.commands.push(Command::Gosub(
-                            next_pair_unchecked!(command_part.into_inner()).try_into()?,
-                        ));
-                    }
-                    Rule::command_if_then => {
-                        let mut kwords = command_part.into_inner();
-                        if_indices.push(prog.commands.len());
-                        prog.commands.push(Command::If {
-                            i1: next_pair_unchecked!(kwords).try_into()?,
-                            op: next_pair_unchecked!(kwords).try_into()?,
-                            i2: next_pair_unchecked!(kwords).try_into()?,
-                            goto_false: 0,
-                        });
-                    }
-                    Rule::command_set => {
-                        let mut kwords = command_part.into_inner();
-                        let var = next_pair_unchecked!(kwords).try_into()?;
-                        let i1 = next_pair_unchecked!(kwords).try_into()?;
-                        let val = {
-                            if kwords.peek().is_none() {
-                                SetValue::Value(i1)
-                            } else {
-                                SetValue::Expression {
-                                    i1,
-                                    op: next_pair_unchecked!(kwords).try_into()?,
-                                    i2: next_pair_unchecked!(kwords).try_into()?,
-                                }
-                            }
-                        };
-                        prog.commands.push(Command::Set { var, val });
-                    }
-                    Rule::label => {
-                        let label = &(command_part.into_inner().next().unwrap());
-                        if label.as_span().start_pos().line_col().1 > 1 {
-                            println!("{}", label.as_span().start_pos().line_col().1);
-                            return Err(Error::LabelIndentationError(label.into(), label.as_str()));
+        for command_group in pairs.next().unwrap().into_inner() {
+            let mut if_indices: Vec<usize> = Vec::new();
+            for command in command_group.into_inner() {
+                for command_part in command.into_inner() {
+                    match command_part.as_rule() {
+                        Rule::kword_command_nfunc => {
+                            prog.commands.push(ir::Command::from_keyword(&command_part));
                         }
-                        prog.labels
-                            .insert(Identifier(label.as_str()), prog.commands.len());
-                    }
-                    _ => unreachable!(),
-                };
+                        Rule::command_func => prog
+                            .commands
+                            .push(ir::Command::try_from_func(&mut command_part.into_inner())?),
+                        Rule::command_goto => {
+                            prog.commands.push(ir::Command::Goto(
+                                next_pair_unchecked!(command_part.into_inner()).try_into()?,
+                            ));
+                        }
+                        Rule::command_gosub => {
+                            prog.commands.push(ir::Command::Gosub(
+                                next_pair_unchecked!(command_part.into_inner()).try_into()?,
+                            ));
+                        }
+                        Rule::command_if_then => {
+                            let mut kwords = command_part.into_inner();
+                            if_indices.push(prog.commands.len());
+                            prog.commands.push(ir::Command::If {
+                                i1: next_pair_unchecked!(kwords).try_into()?,
+                                op: next_pair_unchecked!(kwords).try_into()?,
+                                i2: next_pair_unchecked!(kwords).try_into()?,
+                                goto_false: 0,
+                            });
+                        }
+                        Rule::command_set => {
+                            let mut kwords = command_part.into_inner();
+                            let var = next_pair_unchecked!(kwords).try_into()?;
+                            let i1 = next_pair_unchecked!(kwords).try_into()?;
+                            let val = {
+                                if kwords.peek().is_none() {
+                                    ir::SetValue::Value(i1)
+                                } else {
+                                    ir::SetValue::Expression {
+                                        i1,
+                                        op: next_pair_unchecked!(kwords).try_into()?,
+                                        i2: next_pair_unchecked!(kwords).try_into()?,
+                                    }
+                                }
+                            };
+                            prog.commands.push(ir::Command::Set { var, val });
+                        }
+                        Rule::label => {
+                            let label = &(command_part.into_inner().next().unwrap());
+                            if label.as_span().start_pos().line_col().1 > 1 {
+                                println!("{}", label.as_span().start_pos().line_col().1);
+                                return Err(Error::LabelIndentationError(
+                                    label.into(),
+                                    label.as_str(),
+                                ));
+                            }
+                            prog.labels
+                                .insert(ir::Identifier(label.as_str()), prog.commands.len());
+                        }
+                        _ => unreachable!(),
+                    };
+                }
+            }
+
+            for idx in if_indices {
+                let goto_false_tgt = prog.commands.len();
+                if let ir::Command::If {
+                    i1: _,
+                    op: _,
+                    i2: _,
+                    goto_false: goto_false_idx,
+                } = &mut prog.commands[idx]
+                {
+                    *goto_false_idx = goto_false_tgt;
+                }
             }
         }
 
-        for idx in if_indices {
-            let goto_false_tgt = prog.commands.len();
-            if let Command::If {
-                i1: _,
-                op: _,
-                i2: _,
-                goto_false: goto_false_idx,
-            } = &mut prog.commands[idx]
-            {
-                *goto_false_idx = goto_false_tgt;
-            }
-        }
+        prog.commands.push(ir::Command::End);
+
+        Ok(prog)
     }
-
-    prog.commands.push(Command::End);
-
-    Ok(prog)
 }
