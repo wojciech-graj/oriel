@@ -24,7 +24,7 @@ use crate::ir::*;
 
 #[derive(Parser)]
 #[grammar = "oriel.pest"]
-struct IdentParser;
+struct OrielParser;
 
 macro_rules! next_pair {
     ($pairs:expr) => {
@@ -70,6 +70,16 @@ fn next_pair_str_lit<'a>(pairs: &mut Pairs<'a, Rule>) -> Result<&'a str, Error<'
     } else {
         Err(Error::ArgTypeError(pair.into(), pair.as_str()))
     }
+}
+
+fn next_pair_set_menu_label<'a>(
+    pairs: &mut Pairs<'a, Rule>,
+) -> Result<Option<Identifier<'a>>, Error<'a>> {
+    let pair = pairs.next().ok_or_else(|| Error::MissingArgError)?;
+    Ok(match pair.as_str() {
+        "IGNORE" => None,
+        _ => Some((&pair).try_into()?),
+    })
 }
 
 enum_impl_from_str!(
@@ -166,7 +176,7 @@ impl<'a> TryFrom<&Pair<'a, Rule>> for PhysicalKey {
                 let c = s.chars().nth(len - 2).unwrap();
                 if (len == 4 && s.chars().nth(1).unwrap() != '^')
                     || !c.is_ascii_graphic()
-                    || c.is_ascii_whitespace()
+                    || (c != ' ' && c.is_ascii_whitespace())
                 {
                     Err(Error::InvalidPhysicalKeyError(s))
                 } else {
@@ -193,9 +203,15 @@ impl<'a> TryFrom<&Pair<'a, Rule>> for Key<'a> {
     }
 }
 
-impl<'a> From<&Pair<'a, Rule>> for Identifier<'a> {
-    fn from(value: &Pair<'a, Rule>) -> Self {
-        Identifier(value.as_str())
+impl<'a> TryFrom<&Pair<'a, Rule>> for Identifier<'a> {
+    type Error = Error<'a>;
+
+    fn try_from(value: &Pair<'a, Rule>) -> Result<Self, Self::Error> {
+        if let Rule::identifier = value.as_rule() {
+            Ok(Identifier(value.as_str()))
+        } else {
+            Err(Error::ArgTypeError(value.into(), value.as_str()))
+        }
     }
 }
 
@@ -210,7 +226,7 @@ impl<'a> TryFrom<&Pair<'a, Rule>> for Integer<'a> {
                 )?))
             }
             Rule::identifier => Ok(Integer::Variable(Identifier(pair.as_str()))),
-            _ => unreachable!(),
+            _ => Err(Error::ArgTypeError(pair.into(), pair.as_str())),
         }
     }
 }
@@ -366,13 +382,16 @@ impl<'a> Command<'a> {
                 icon: next_pair!(kwords)?.try_into()?,
                 text: next_pair_str_lit(kwords)?,
                 caption: next_pair_str_lit(kwords)?,
-                button_pushed: Identifier(next_pair!(kwords)?.as_str()),
+                button_pushed: next_pair!(kwords)?.try_into()?,
             },
             "run" => Command::Run(next_pair_str_lit(kwords)?),
             "setkeyboard" => Command::SetKeyboard({
                 let mut params: HashMap<Key, Identifier> = HashMap::new();
                 while kwords.peek().is_some() {
-                    params.insert(next_pair!(kwords)?.try_into()?, next_pair!(kwords)?.into());
+                    params.insert(
+                        next_pair!(kwords)?.try_into()?,
+                        next_pair!(kwords)?.try_into()?,
+                    );
                 }
                 params
             }),
@@ -382,13 +401,7 @@ impl<'a> Command<'a> {
                     items.push(MenuCategory {
                         item: MenuItem {
                             name: next_pair_str_lit(kwords)?,
-                            label: {
-                                let pair = kwords.next().ok_or_else(|| Error::MissingArgError)?;
-                                match pair.as_str() {
-                                    "IGNORE" => None,
-                                    s => Some(Identifier(s)),
-                                }
-                            },
+                            label: next_pair_set_menu_label(kwords)?,
                         },
                         members: {
                             let mut members = Vec::new();
@@ -401,15 +414,7 @@ impl<'a> Command<'a> {
                                         name: str_lit_parse(s).ok_or_else(|| {
                                             Error::ArgTypeError((&pair).into(), pair.as_str())
                                         })?,
-                                        label: {
-                                            let pair = kwords
-                                                .next()
-                                                .ok_or_else(|| Error::MissingArgError)?;
-                                            match pair.as_str() {
-                                                "IGNORE" => None,
-                                                s => Some(Identifier(s)),
-                                            }
-                                        }, //TODO: dedup
+                                        label: next_pair_set_menu_label(kwords)?,
                                     }),
                                 })
                             }
@@ -428,9 +433,9 @@ impl<'a> Command<'a> {
                         x2: next_pair!(kwords)?.try_into()?,
                         y2: next_pair!(kwords)?.try_into()?,
                         callbacks: MouseCallbacks {
-                            label: next_pair!(kwords)?.into(),
-                            x: next_pair!(kwords)?.into(),
-                            y: next_pair!(kwords)?.into(),
+                            label: next_pair!(kwords)?.try_into()?,
+                            x: next_pair!(kwords)?.try_into()?,
+                            y: next_pair!(kwords)?.try_into()?,
                         },
                     });
                 }
@@ -487,7 +492,7 @@ impl<'a> Command<'a> {
 }
 
 pub fn parse(src: &str) -> Result<Program<'_>, Error> {
-    let mut pairs = IdentParser::parse(Rule::program, src)?;
+    let mut pairs = OrielParser::parse(Rule::program, src)?;
 
     let mut prog = Program {
         commands: Vec::new(),
@@ -506,14 +511,14 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
                         .commands
                         .push(Command::try_from_func(&mut command_part.into_inner())?),
                     Rule::command_goto => {
-                        prog.commands.push(Command::Goto(Identifier(
-                            next_pair_unchecked!(command_part.into_inner()).as_str(),
-                        )));
+                        prog.commands.push(Command::Goto(
+                            next_pair_unchecked!(command_part.into_inner()).try_into()?,
+                        ));
                     }
                     Rule::command_gosub => {
-                        prog.commands.push(Command::Gosub(Identifier(
-                            next_pair_unchecked!(command_part.into_inner()).as_str(),
-                        )));
+                        prog.commands.push(Command::Gosub(
+                            next_pair_unchecked!(command_part.into_inner()).try_into()?,
+                        ));
                     }
                     Rule::command_if_then => {
                         let mut kwords = command_part.into_inner();
@@ -527,7 +532,7 @@ pub fn parse(src: &str) -> Result<Program<'_>, Error> {
                     }
                     Rule::command_set => {
                         let mut kwords = command_part.into_inner();
-                        let var = Identifier(next_pair_unchecked!(kwords).as_str());
+                        let var = next_pair_unchecked!(kwords).try_into()?;
                         let i1 = next_pair_unchecked!(kwords).try_into()?;
                         let val = {
                             if kwords.peek().is_none() {

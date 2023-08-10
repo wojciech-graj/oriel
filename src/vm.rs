@@ -234,14 +234,6 @@ pub enum Error<'a> {
     SystemError(#[from] Box<dyn std::error::Error>),
 }
 
-pub struct VM<'a> {
-    program: &'a ir::Program<'a>,
-    ip: usize,
-    vars: HashMap<ir::Identifier<'a>, u16>,
-    call_stack: Vec<usize>,
-    ctx: &'a mut dyn VMSys<'a>,
-}
-
 macro_rules! integer_value {
     ($self:ident, $id:expr) => {{
         ($self.get_integer($id).ok_or_else(|| {
@@ -258,6 +250,14 @@ macro_rules! incr_ip {
         $e;
         $self.ip += 1;
     }};
+}
+
+pub struct VM<'a> {
+    program: &'a ir::Program<'a>,
+    ip: usize,
+    vars: HashMap<ir::Identifier<'a>, u16>,
+    call_stack: Vec<usize>,
+    ctx: &'a mut dyn VMSys<'a>,
 }
 
 impl<'a> VM<'a> {

@@ -23,6 +23,7 @@ use gtk::cairo;
 use gtk::gdk;
 use gtk::gdk::prelude::*;
 use gtk::gdk_pixbuf;
+use gtk::glib;
 use gtk::prelude::*;
 use thiserror::Error;
 
@@ -530,7 +531,7 @@ impl<'a> VMSysGtk<'a> {
         let window = gtk::Window::new(gtk::WindowType::Toplevel);
         window.set_default_size(800, 600);
         window.set_title(format!("Oriel - {}", filename).as_str());
-        let logo = gdk::gdk_pixbuf::Pixbuf::from_file("res/LOGO.png")?;
+        let logo = pixbuf_from_bytes(include_bytes!("res/LOGO.png"), None)?;
         window.set_icon(Some(&logo));
 
         let mainbox = gtk::Box::new(gtk::Orientation::Vertical, 2);
@@ -635,16 +636,36 @@ impl<'a> VMSysGtk<'a> {
     }
 }
 
-fn filename_conv(filename: &str) -> &str {
+fn pixbuf_from_bytes(
+    bytes: &[u8],
+    size: Option<(i32, i32)>,
+) -> Result<gdk::gdk_pixbuf::Pixbuf, Error> {
+    let loader = gdk_pixbuf::PixbufLoader::new();
+    if let Some((width, height)) = size {
+        loader.set_size(width, height);
+    }
+    loader.write(bytes)?;
+    loader.close()?;
+    loader.pixbuf().ok_or_else(|| Error::PixbufLoadError)
+}
+
+fn pixbuf_from_filename(
+    filename: &str,
+    size: Option<(i32, i32)>,
+) -> Result<gdk::gdk_pixbuf::Pixbuf, Error> {
     match filename {
-        "C:\\WINDOWS\\BOXES.BMP" => "res/BOXES.BMP",
-        "C:\\WINDOWS\\CHESS.BMP" => "res/CHESS.BMP",
-        "C:\\WINDOWS\\PAPER.BMP" => "res/PAPER.BMP",
-        "C:\\WINDOWS\\PARTY.BMP" => "res/PARTY.BMP",
-        "C:\\WINDOWS\\PYRAMID.BMP" => "res/PYRAMID.BMP",
-        "C:\\WINDOWS\\RIBBONS.BMP" => "res/RIBBONS.BMP",
-        "C:\\WINDOWS\\WEAVE.BMP" => "res/WEAVE.BMP",
-        filename => filename,
+        "C:\\WINDOWS\\BOXES.BMP" => pixbuf_from_bytes(include_bytes!("res/BOXES.BMP"), size),
+        "C:\\WINDOWS\\CHESS.BMP" => pixbuf_from_bytes(include_bytes!("res/CHESS.BMP"), size),
+        "C:\\WINDOWS\\PAPER.BMP" => pixbuf_from_bytes(include_bytes!("res/PAPER.BMP"), size),
+        "C:\\WINDOWS\\PARTY.BMP" => pixbuf_from_bytes(include_bytes!("res/PARTY.BMP"), size),
+        "C:\\WINDOWS\\PYRAMID.BMP" => pixbuf_from_bytes(include_bytes!("res/PYRAMID.BMP"), size),
+        "C:\\WINDOWS\\RIBBONS.BMP" => pixbuf_from_bytes(include_bytes!("res/RIBBONS.BMP"), size),
+        "C:\\WINDOWS\\WEAVE.BMP" => pixbuf_from_bytes(include_bytes!("res/WEAVE.BMP"), size),
+        filename => Ok(if let Some((width, height)) = size {
+            gdk_pixbuf::Pixbuf::from_file_at_size(filename, width, height)
+        } else {
+            gdk_pixbuf::Pixbuf::from_file(filename)
+        }?),
     }
 }
 
@@ -667,6 +688,10 @@ enum Error {
     SurfaceCreateError,
     #[error("Failed to get monitor")]
     MonitorMissingError,
+    #[error("Glib error: {}", .0)]
+    GlibError(#[from] glib::Error),
+    #[error("Failed to create Pixbuf from image")]
+    PixbufLoadError,
 }
 
 impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
@@ -722,9 +747,8 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
         scale_vars!(draw_ctx, (x, y));
 
-        let filename = filename_conv(filename);
+        let pixbuf = pixbuf_from_filename(filename, None)?;
 
-        let pixbuf = gdk_pixbuf::Pixbuf::from_file(filename)?;
         let surface = pixbuf
             .create_surface(1, self.window.window().as_ref())
             .ok_or_else(|| Error::SurfaceCreateError)?;
@@ -958,35 +982,34 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
         let draw_ctx = self.draw_ctx.borrow();
 
         scale_vars!(draw_ctx, (x1, y1, x2, y2));
-        let filename = filename_conv(filename);
 
-        let pixbuf = gdk_pixbuf::Pixbuf::from_file_at_size(
+        let pixbuf = pixbuf_from_filename(
             filename,
-            (x1 - x2).abs() as i32,
-            (y1 - y2).abs() as i32,
+            Some(((x2 - x1).abs() as i32, (y2 - y1).abs() as i32)),
         )?;
         let surface = pixbuf
             .create_surface(1, self.window.window().as_ref())
             .ok_or_else(|| Error::SurfaceCreateError)?;
 
         let cr = cairo::Context::new(draw_ctx.surface.as_ref())?;
+
         cr.scale(
             if x1 < x2 { 1. } else { -1. },
             if y1 < y2 { 1. } else { -1. },
         );
         cr.translate(
             if x1 < x2 {
-                0.
+                x1.min(x2)
             } else {
-                (-pixbuf.width()).into()
+                (pixbuf.width()) as f64 - x1.min(x2)
             },
             if y1 < y2 {
-                0.
+                y1.min(y2)
             } else {
-                (-pixbuf.height()).into()
+                (-pixbuf.height()) as f64 - y1.min(y2)
             },
         );
-        cr.set_source_surface(&surface, x1.min(x2), y1.min(y2))?;
+        cr.set_source_surface(&surface, 0., 0.)?;
         cr.paint()?;
         Ok(())
     }
