@@ -20,10 +20,13 @@ use pest_derive::Parser;
 
 use thiserror::Error;
 
-use crate::ir::{
-    self, BackgroundTransparency, BrushType, Coordinates, FontSlant, FontUnderline, FontWeight,
-    LogicalOperator, MathOperator, MessageBoxIcon, MessageBoxType, PenType, SetWindowOption,
-    WaitMode,
+use crate::{
+    cfg,
+    ir::{
+        self, BackgroundTransparency, BrushType, Coordinates, FontSlant, FontUnderline, FontWeight,
+        LogicalOperator, MathOperator, MessageBoxIcon, MessageBoxType, PenType, SetWindowOption,
+        WaitMode,
+    },
 };
 
 #[derive(Parser)]
@@ -271,6 +274,8 @@ pub enum Error<'a> {
     ExtraneousArgError(ErrorLoc, &'a str),
     #[error("{} Argument '{}' has incorrect type", .0, .1)]
     ArgTypeError(ErrorLoc, &'a str),
+    #[error("Number of labels exceeds 500")]
+    ExcessLabelsError,
     #[error("Physical key '{}' is invalid", .0)]
     InvalidPhysicalKeyError(&'a str),
 }
@@ -496,7 +501,7 @@ impl<'a> ir::Command<'a> {
 }
 
 impl<'a> ir::Program<'a> {
-    pub fn from_src(src: &'a str) -> Result<Self, Error> {
+    pub fn from_src(src: &'a str, config: &cfg::Config) -> Result<Self, Error<'a>> {
         let mut pairs = OrielParser::parse(Rule::program, src)?;
 
         let mut prog = Self {
@@ -553,6 +558,9 @@ impl<'a> ir::Program<'a> {
                             prog.commands.push(ir::Command::Set { var, val });
                         }
                         Rule::label => {
+                            if config.pedantic && prog.labels.len() >= 500 {
+                                return Err(Error::ExcessLabelsError);
+                            }
                             let label = &(command_part.into_inner().next().unwrap());
                             if label.as_span().start_pos().line_col().1 > 1 {
                                 println!("{}", label.as_span().start_pos().line_col().1);
