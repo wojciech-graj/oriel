@@ -221,9 +221,7 @@ pub trait VMSys<'a> {
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Error, Debug)]
-pub enum Error<'a> {
-    #[error("Attempted to use undeclared variable '{}'", (.0).0)]
-    UndeclaredVariableError(ir::Identifier<'a>),
+pub enum Error {
     #[error("Call stack exhausted")]
     CallStackExhaustedError,
     #[error("Integer Under/Over-flow")]
@@ -234,17 +232,6 @@ pub enum Error<'a> {
     NonexistentLabelError,
     #[error("System Error: {}", .0)]
     SystemError(#[from] Box<dyn std::error::Error>),
-}
-
-macro_rules! integer_value {
-    ($self:ident, $id:expr) => {{
-        ($self.get_integer($id).ok_or_else(|| {
-            Error::UndeclaredVariableError(match $id {
-                ir::Integer::Variable(id) => id,
-                ir::Integer::Literal(_) => unreachable!(),
-            })
-        }))
-    }};
 }
 
 macro_rules! incr_ip {
@@ -273,10 +260,10 @@ impl<'a> VM<'a> {
         }
     }
 
-    fn get_integer(&self, i: ir::Integer) -> Option<u16> {
+    fn get_integer(&self, i: ir::Integer) -> u16 {
         match i {
-            ir::Integer::Literal(val) => Some(val),
-            ir::Integer::Variable(ref ident) => self.vars.get(ident).copied(),
+            ir::Integer::Literal(val) => val,
+            ir::Integer::Variable(ref ident) => self.vars.get(ident).copied().unwrap_or_default(),
         }
     }
 
@@ -284,7 +271,7 @@ impl<'a> VM<'a> {
         self.vars.insert(ident, val);
     }
 
-    fn goto_label(&mut self, label: ir::Identifier<'_>) -> Result<(), Error<'a>> {
+    fn goto_label(&mut self, label: ir::Identifier<'_>) -> Result<(), Error> {
         self.ip = *(self
             .program
             .labels
@@ -293,7 +280,7 @@ impl<'a> VM<'a> {
         Ok(())
     }
 
-    pub fn step(&mut self) -> Result<bool, Error<'a>> {
+    pub fn step(&mut self) -> Result<bool, Error> {
         let cmd = &self.program.commands[self.ip];
         match *cmd {
             ir::Command::Beep => incr_ip!(self, self.ctx.beep()?),
@@ -309,24 +296,21 @@ impl<'a> VM<'a> {
             } => incr_ip!(
                 self,
                 self.ctx.draw_arc(
-                    integer_value!(self, x1)?,
-                    integer_value!(self, y1)?,
-                    integer_value!(self, x2)?,
-                    integer_value!(self, y2)?,
-                    integer_value!(self, x3)?,
-                    integer_value!(self, y3)?,
-                    integer_value!(self, x4)?,
-                    integer_value!(self, y4)?,
+                    self.get_integer(x1),
+                    self.get_integer(y1),
+                    self.get_integer(x2),
+                    self.get_integer(y2),
+                    self.get_integer(x3),
+                    self.get_integer(y3),
+                    self.get_integer(x4),
+                    self.get_integer(y4),
                 )?
             ),
             ir::Command::DrawBackground => incr_ip!(self, self.ctx.draw_background()?),
             ir::Command::DrawBitmap { x, y, filename } => incr_ip!(
                 self,
-                self.ctx.draw_bitmap(
-                    integer_value!(self, x)?,
-                    integer_value!(self, y)?,
-                    filename
-                )?
+                self.ctx
+                    .draw_bitmap(self.get_integer(x), self.get_integer(y), filename)?
             ),
             ir::Command::DrawChord {
                 x1,
@@ -340,50 +324,50 @@ impl<'a> VM<'a> {
             } => incr_ip!(
                 self,
                 self.ctx.draw_chord(
-                    integer_value!(self, x1)?,
-                    integer_value!(self, y1)?,
-                    integer_value!(self, x2)?,
-                    integer_value!(self, y2)?,
-                    integer_value!(self, x3)?,
-                    integer_value!(self, y3)?,
-                    integer_value!(self, x4)?,
-                    integer_value!(self, y4)?,
+                    self.get_integer(x1),
+                    self.get_integer(y1),
+                    self.get_integer(x2),
+                    self.get_integer(y2),
+                    self.get_integer(x3),
+                    self.get_integer(y3),
+                    self.get_integer(x4),
+                    self.get_integer(y4),
                 )?
             ),
             ir::Command::DrawEllipse { x1, y1, x2, y2 } => incr_ip!(
                 self,
                 self.ctx.draw_ellipse(
-                    integer_value!(self, x1)?,
-                    integer_value!(self, y1)?,
-                    integer_value!(self, x2)?,
-                    integer_value!(self, y2)?,
+                    self.get_integer(x1),
+                    self.get_integer(y1),
+                    self.get_integer(x2),
+                    self.get_integer(y2),
                 )?
             ),
             ir::Command::DrawFlood { x, y, r, g, b } => incr_ip!(
                 self,
                 self.ctx.draw_flood(
-                    integer_value!(self, x)?,
-                    integer_value!(self, y)?,
-                    integer_value!(self, r)?,
-                    integer_value!(self, g)?,
-                    integer_value!(self, b)?,
+                    self.get_integer(x),
+                    self.get_integer(y),
+                    self.get_integer(r),
+                    self.get_integer(g),
+                    self.get_integer(b),
                 )?
             ),
             ir::Command::DrawLine { x1, y1, x2, y2 } => incr_ip!(
                 self,
                 self.ctx.draw_line(
-                    integer_value!(self, x1)?,
-                    integer_value!(self, y1)?,
-                    integer_value!(self, x2)?,
-                    integer_value!(self, y2)?,
+                    self.get_integer(x1),
+                    self.get_integer(y1),
+                    self.get_integer(x2),
+                    self.get_integer(y2),
                 )?
             ),
             ir::Command::DrawNumber { x, y, n } => incr_ip!(
                 self,
                 self.ctx.draw_number(
-                    integer_value!(self, x)?,
-                    integer_value!(self, y)?,
-                    integer_value!(self, n)?,
+                    self.get_integer(x),
+                    self.get_integer(y),
+                    self.get_integer(n),
                 )?
             ),
             ir::Command::DrawPie {
@@ -398,23 +382,23 @@ impl<'a> VM<'a> {
             } => incr_ip!(
                 self,
                 self.ctx.draw_pie(
-                    integer_value!(self, x1)?,
-                    integer_value!(self, y1)?,
-                    integer_value!(self, x2)?,
-                    integer_value!(self, y2)?,
-                    integer_value!(self, x3)?,
-                    integer_value!(self, y3)?,
-                    integer_value!(self, x4)?,
-                    integer_value!(self, y4)?,
+                    self.get_integer(x1),
+                    self.get_integer(y1),
+                    self.get_integer(x2),
+                    self.get_integer(y2),
+                    self.get_integer(x3),
+                    self.get_integer(y3),
+                    self.get_integer(x4),
+                    self.get_integer(y4),
                 )?
             ),
             ir::Command::DrawRectangle { x1, y1, x2, y2 } => incr_ip!(
                 self,
                 self.ctx.draw_rectangle(
-                    integer_value!(self, x1)?,
-                    integer_value!(self, y1)?,
-                    integer_value!(self, x2)?,
-                    integer_value!(self, y2)?,
+                    self.get_integer(x1),
+                    self.get_integer(y1),
+                    self.get_integer(x2),
+                    self.get_integer(y2),
                 )?
             ),
             ir::Command::DrawRoundRectangle {
@@ -427,12 +411,12 @@ impl<'a> VM<'a> {
             } => incr_ip!(
                 self,
                 self.ctx.draw_round_rectangle(
-                    integer_value!(self, x1)?,
-                    integer_value!(self, y1)?,
-                    integer_value!(self, x2)?,
-                    integer_value!(self, y2)?,
-                    integer_value!(self, x3)?,
-                    integer_value!(self, y3)?,
+                    self.get_integer(x1),
+                    self.get_integer(y1),
+                    self.get_integer(x2),
+                    self.get_integer(y2),
+                    self.get_integer(x3),
+                    self.get_integer(y3),
                 )?
             ),
             ir::Command::DrawSizedBitmap {
@@ -444,17 +428,17 @@ impl<'a> VM<'a> {
             } => incr_ip!(
                 self,
                 self.ctx.draw_sized_bitmap(
-                    integer_value!(self, x1)?,
-                    integer_value!(self, y1)?,
-                    integer_value!(self, x2)?,
-                    integer_value!(self, y2)?,
+                    self.get_integer(x1),
+                    self.get_integer(y1),
+                    self.get_integer(x2),
+                    self.get_integer(y2),
                     filename,
                 )?
             ),
             ir::Command::DrawText { x, y, text } => incr_ip!(
                 self,
                 self.ctx
-                    .draw_text(integer_value!(self, x)?, integer_value!(self, y)?, text)?
+                    .draw_text(self.get_integer(x), self.get_integer(y), text)?
             ),
             ir::Command::End => return Ok(false),
             ir::Command::Gosub(ident) => {
@@ -474,7 +458,7 @@ impl<'a> VM<'a> {
                 i2,
                 goto_false,
             } => {
-                self.ip = if op.cmp(integer_value!(self, i1)?, integer_value!(self, i2)?) {
+                self.ip = if op.cmp(self.get_integer(i1), self.get_integer(i2)) {
                     self.ip + 1
                 } else {
                     goto_false
@@ -490,7 +474,7 @@ impl<'a> VM<'a> {
             } => {
                 let button_pushed_val = self.ctx.message_box(
                     typ,
-                    integer_value!(self, default_button)?,
+                    self.get_integer(default_button),
                     icon,
                     text,
                     caption,
@@ -503,9 +487,9 @@ impl<'a> VM<'a> {
                 self.set_variable(
                     var,
                     match val {
-                        ir::SetValue::Value(i) => integer_value!(self, i)?,
+                        ir::SetValue::Value(i) => self.get_integer(i),
                         ir::SetValue::Expression { i1, op, i2 } => op
-                            .eval(integer_value!(self, i1)?, integer_value!(self, i2)?)
+                            .eval(self.get_integer(i1), self.get_integer(i2))
                             .ok_or_else(|| Error::MathOperationError)?,
                     }
                 )
@@ -519,7 +503,8 @@ impl<'a> VM<'a> {
                             Ok((
                                 match key {
                                     ir::Key::Virtual(integer) => Key::Virtual(
-                                        (integer_value!(self, integer)?
+                                        (self
+                                            .get_integer(integer)
                                             .try_into()
                                             .map_err(|_| Error::InvalidVirtualKeyError))?,
                                     ),
@@ -539,10 +524,10 @@ impl<'a> VM<'a> {
                         .iter()
                         .map(|param| {
                             Ok(MouseRegion {
-                                x1: integer_value!(self, param.x1)?,
-                                y1: integer_value!(self, param.y1)?,
-                                x2: integer_value!(self, param.x2)?,
-                                y2: integer_value!(self, param.y2)?,
+                                x1: self.get_integer(param.x1),
+                                y1: self.get_integer(param.y1),
+                                x2: self.get_integer(param.x2),
+                                y2: self.get_integer(param.y2),
                                 callbacks: &param.callbacks,
                             })
                         })
@@ -555,18 +540,18 @@ impl<'a> VM<'a> {
                 self,
                 self.ctx.use_background(
                     option,
-                    integer_value!(self, r)?,
-                    integer_value!(self, g)?,
-                    integer_value!(self, b)?,
+                    self.get_integer(r),
+                    self.get_integer(g),
+                    self.get_integer(b),
                 )?
             ),
             ir::Command::UseBrush { option, r, g, b } => incr_ip!(
                 self,
                 self.ctx.use_brush(
                     option,
-                    integer_value!(self, r)?,
-                    integer_value!(self, g)?,
-                    integer_value!(self, b)?,
+                    self.get_integer(r),
+                    self.get_integer(g),
+                    self.get_integer(b),
                 )?
             ),
             ir::Command::UseCaption(text) => incr_ip!(self, self.ctx.use_caption(text)?),
@@ -587,14 +572,14 @@ impl<'a> VM<'a> {
                 self,
                 self.ctx.use_font(
                     name,
-                    integer_value!(self, width)?,
-                    integer_value!(self, height)?,
+                    self.get_integer(width),
+                    self.get_integer(height),
                     bold,
                     italic,
                     underline,
-                    integer_value!(self, r)?,
-                    integer_value!(self, g)?,
-                    integer_value!(self, b)?,
+                    self.get_integer(r),
+                    self.get_integer(g),
+                    self.get_integer(b),
                 )?
             ),
             ir::Command::UsePen {
@@ -607,15 +592,15 @@ impl<'a> VM<'a> {
                 self,
                 self.ctx.use_pen(
                     option,
-                    integer_value!(self, width)?,
-                    integer_value!(self, r)?,
-                    integer_value!(self, g)?,
-                    integer_value!(self, b)?,
+                    self.get_integer(width),
+                    self.get_integer(r),
+                    self.get_integer(g),
+                    self.get_integer(b),
                 )?
             ),
             ir::Command::WaitInput(milliseconds) => {
                 if let Some(input) = self.ctx.wait_input(if let Some(i) = milliseconds {
-                    Some(integer_value!(self, i)?)
+                    Some(self.get_integer(i))
                 } else {
                     None
                 })? {
@@ -636,7 +621,7 @@ impl<'a> VM<'a> {
         Ok(true)
     }
 
-    pub fn run(&'a mut self) -> Result<(), Error<'a>> {
+    pub fn run(&'a mut self) -> Result<(), Error> {
         loop {
             let step_result = self.step()?;
 
