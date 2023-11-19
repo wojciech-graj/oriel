@@ -1084,7 +1084,7 @@ fn menu_item_conv<'a>(
     let menu_item = if item.name.contains('&') {
         gtk::MenuItem::with_mnemonic(&item.name.replace('&', "_"))
     } else {
-        gtk::MenuItem::with_label(item.name)
+        gtk::MenuItem::with_label(item.name.as_str())
     };
     if let Some(label) = item.label {
         let queue_clone = input_ctx.queue.clone();

@@ -17,7 +17,7 @@ use thiserror::Error;
 use crate::{cfg, ir};
 
 impl ir::LogicalOperator {
-    fn cmp(&self, i1: u16, i2: u16) -> bool {
+    fn cmp_integer(&self, i1: u16, i2: u16) -> bool {
         match self {
             ir::LogicalOperator::Equal => i1 == i2,
             ir::LogicalOperator::Less => i1 < i2,
@@ -25,6 +25,17 @@ impl ir::LogicalOperator {
             ir::LogicalOperator::LEqual => i1 <= i2,
             ir::LogicalOperator::GEqual => i1 >= i2,
             ir::LogicalOperator::NEqual => i1 != i2,
+        }
+    }
+
+    fn cmp_str(&self, s1: &str, s2: &str) -> bool {
+        match self {
+            ir::LogicalOperator::Equal => s1 == s2,
+            ir::LogicalOperator::Less => s1 < s2,
+            ir::LogicalOperator::Greater => s1 > s2,
+            ir::LogicalOperator::LEqual => s1 <= s2,
+            ir::LogicalOperator::GEqual => s1 >= s2,
+            ir::LogicalOperator::NEqual => s1 != s2,
         }
     }
 }
@@ -61,13 +72,13 @@ pub struct MenuCategory<'a> {
     pub members: Vec<MenuMember<'a>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct MenuItem<'a> {
-    pub name: &'a str,
+    pub name: String,
     pub label: Option<ir::Identifier<'a>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum MenuMember<'a> {
     Item(MenuItem<'a>),
     Separator,
@@ -280,8 +291,8 @@ pub struct VM<'a> {
     program: &'a ir::Program<'a>,
     config: &'a cfg::Config,
     ip: usize,
-    vars: HashMap<ir::Identifier<'a>, u16>,
-    vars_str: HashMap<ir::Identifier<'a>, &'a str>,
+    vars_integer: HashMap<ir::Identifier<'a>, u16>,
+    vars_str: HashMap<ir::Identifier<'a>, String>,
     call_stack: Vec<usize>,
     ctx: &'a mut dyn VMSys<'a>,
 }
@@ -296,7 +307,7 @@ impl<'a> VM<'a> {
             program,
             config,
             ip: 0,
-            vars: HashMap::new(),
+            vars_integer: HashMap::new(),
             vars_str: HashMap::new(),
             call_stack: Vec::new(),
             ctx,
@@ -307,44 +318,48 @@ impl<'a> VM<'a> {
         Ok(match i {
             ir::Integer::Literal(val) => val,
             ir::Integer::Variable(ident) => {
-                if let Some(&val) = self.vars.get(&ident) {
+                if let Some(&val) = self.vars_integer.get(&ident) {
                     val
                 } else {
-                    self.set_variable(ident, 0)?;
+                    self.set_variable_integer(ident, 0)?;
                     0
                 }
             }
         })
     }
 
-    fn get_str(&mut self, s: ir::Str<'a>) -> Result<&'a str, Error> {
+    fn get_str(&mut self, s: ir::Str<'a>) -> Result<String, Error> {
         Ok(match s {
-            ir::Str::Literal(val) => val,
+            ir::Str::Literal(val) => val.into(),
             ir::Str::Variable(ident) => {
-                if let Some(&val) = self.vars_str.get(&ident) {
+                if let Some(val) = self.vars_str.get(&ident).cloned() {
                     val
                 } else {
                     self.set_variable_str(ident, "")?;
-                    ""
+                    String::from("")
                 }
             }
         })
     }
 
-    fn set_variable(&mut self, ident: ir::Identifier<'a>, val: u16) -> Result<(), Error> {
-        if self.config.pedantic && self.vars.len() >= 500 {
+    fn set_variable_integer(&mut self, ident: ir::Identifier<'a>, val: u16) -> Result<(), Error> {
+        if self.config.pedantic && self.vars_integer.len() >= 500 {
             Err(Error::ExcessVariablesError)
         } else {
-            self.vars.insert(ident, val);
+            self.vars_integer.insert(ident, val);
             Ok(())
         }
     }
 
-    fn set_variable_str(&mut self, ident: ir::Identifier<'a>, val: &'a str) -> Result<(), Error> {
+    fn set_variable_str(
+        &mut self,
+        ident: ir::Identifier<'a>,
+        val: impl Into<String>,
+    ) -> Result<(), Error> {
         if self.config.pedantic && self.vars_str.len() >= 200 {
             Err(Error::ExcessVariablesStrError)
         } else {
-            self.vars_str.insert(ident, val);
+            self.vars_str.insert(ident, val.into());
             Ok(())
         }
     }
@@ -379,7 +394,7 @@ impl<'a> VM<'a> {
             ir::Command::DrawBitmap { x, y, filename } => incr_ip!(self, {
                 get_integers!(self, x, y);
                 get_strings!(self, filename);
-                self.ctx.draw_bitmap(x, y, filename)?
+                self.ctx.draw_bitmap(x, y, filename.as_str())?
             }),
             ir::Command::DrawChord {
                 x1,
@@ -447,12 +462,13 @@ impl<'a> VM<'a> {
             } => incr_ip!(self, {
                 get_integers!(self, x1, y1, x2, y2);
                 get_strings!(self, filename);
-                self.ctx.draw_sized_bitmap(x1, y1, x2, y2, filename)?
+                self.ctx
+                    .draw_sized_bitmap(x1, y1, x2, y2, filename.as_str())?
             }),
             ir::Command::DrawText { x, y, text } => incr_ip!(self, {
                 get_integers!(self, x, y);
                 get_strings!(self, text);
-                self.ctx.draw_text(x, y, text)?
+                self.ctx.draw_text(x, y, text.as_str())?
             }),
             ir::Command::End => return Ok(false),
             ir::Command::Gosub(ident) => {
@@ -467,12 +483,17 @@ impl<'a> VM<'a> {
             }
             ir::Command::Goto(ident) => self.goto_label(ident)?,
             ir::Command::If {
-                i1,
-                op,
-                i2,
+                condition,
                 goto_false,
             } => {
-                self.ip = if op.cmp(self.get_integer(i1)?, self.get_integer(i2)?) {
+                self.ip = if match condition {
+                    ir::LogicalExpression::Integer { i1, op, i2 } => {
+                        op.cmp_integer(self.get_integer(i1)?, self.get_integer(i2)?)
+                    }
+                    ir::LogicalExpression::Str { s1, op, s2 } => {
+                        op.cmp_str(self.get_str(s1)?.as_str(), self.get_str(s2)?.as_str())
+                    }
+                } {
                     self.ip + 1
                 } else {
                     goto_false
@@ -488,24 +509,46 @@ impl<'a> VM<'a> {
             } => {
                 get_integers!(self, default_button);
                 get_strings!(self, text, caption);
-                let button_pushed_val =
-                    self.ctx
-                        .message_box(typ, default_button, icon, text, caption)?;
-                incr_ip!(self, self.set_variable(button_pushed, button_pushed_val)?);
+                let button_pushed_val = self.ctx.message_box(
+                    typ,
+                    default_button,
+                    icon,
+                    text.as_str(),
+                    caption.as_str(),
+                )?;
+                incr_ip!(
+                    self,
+                    self.set_variable_integer(button_pushed, button_pushed_val)?
+                );
             }
             ir::Command::Run(command) => incr_ip!(self, {
                 get_strings!(self, command);
-                self.ctx.run(command)?
+                self.ctx.run(command.as_str())?
             }),
-            ir::Command::Set { var, val } => incr_ip!(self, {
-                let ident = match val {
-                    ir::SetValue::Value(i) => self.get_integer(i)?,
-                    ir::SetValue::Expression { i1, op, i2 } => op
-                        .eval(self.get_integer(i1)?, self.get_integer(i2)?)
-                        .ok_or_else(|| Error::MathOperationError)?,
-                };
-                self.set_variable(var, ident)?
-            }),
+            ir::Command::Set { var, val } => incr_ip!(
+                self,
+                match val {
+                    ir::MathExpression::ValueInteger(i) => {
+                        get_integers!(self, i);
+                        self.set_variable_integer(var, i)?
+                    }
+                    ir::MathExpression::ValueStr(s) => {
+                        get_strings!(self, s);
+                        self.set_variable_str(var, s)?;
+                    }
+                    ir::MathExpression::ExpressionInteger { i1, op, i2 } => {
+                        get_integers!(self, i1, i2);
+                        self.set_variable_integer(
+                            var,
+                            op.eval(i1, i2).ok_or_else(|| Error::MathOperationError)?,
+                        )?;
+                    }
+                    ir::MathExpression::ExpressionStr { s1, s2 } => {
+                        get_strings!(self, s1, s2);
+                        self.set_variable_str(var, format!("{s1}{s2}"))?;
+                    }
+                }
+            ),
             ir::Command::SetKeyboard(ref hashmap) => incr_ip!(self, {
                 let params = hashmap
                     .iter()
@@ -519,6 +562,7 @@ impl<'a> VM<'a> {
                                 ),
                                 ir::Key::Physical(physical) => Key::Physical({
                                     self.get_str(physical)?
+                                        .as_str()
                                         .try_into()
                                         .map_err(|_| Error::InvalidPhysicalKeyError)?
                                 }),
@@ -583,7 +627,7 @@ impl<'a> VM<'a> {
             }),
             ir::Command::UseCaption(text) => incr_ip!(self, {
                 get_strings!(self, text);
-                self.ctx.use_caption(text)?
+                self.ctx.use_caption(text.as_str())?
             }),
             ir::Command::UseCoordinates(coordinates) => {
                 incr_ip!(self, self.ctx.use_coordinates(coordinates)?);
@@ -601,8 +645,17 @@ impl<'a> VM<'a> {
             } => incr_ip!(self, {
                 get_integers!(self, width, height, r, g, b);
                 get_strings!(self, name);
-                self.ctx
-                    .use_font(name, width, height, bold, italic, underline, r, g, b)?
+                self.ctx.use_font(
+                    name.as_str(),
+                    width,
+                    height,
+                    bold,
+                    italic,
+                    underline,
+                    r,
+                    g,
+                    b,
+                )?
             }),
             ir::Command::UsePen {
                 option,
@@ -625,8 +678,8 @@ impl<'a> VM<'a> {
                         Input::End => return Ok(false),
                         Input::Goto(label) => self.goto_label(label)?,
                         Input::Mouse { callbacks, x, y } => {
-                            self.set_variable(callbacks.x, x)?;
-                            self.set_variable(callbacks.y, y)?;
+                            self.set_variable_integer(callbacks.x, x)?;
+                            self.set_variable_integer(callbacks.y, y)?;
                             self.goto_label(callbacks.label)?;
                         }
                     };

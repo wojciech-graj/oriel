@@ -179,10 +179,9 @@ impl<'a> TryFrom<&Pair<'a, Rule>> for ir::Identifier<'a> {
     type Error = Error<'a>;
 
     fn try_from(value: &Pair<'a, Rule>) -> Result<Self, Self::Error> {
-        if let Rule::identifier = value.as_rule() {
-            Ok(ir::Identifier(value.as_str()))
-        } else {
-            Err(Error::ArgTypeError(value.into(), value.as_str()))
+        match value.as_rule() {
+            Rule::identifier | Rule::identifier_str => Ok(ir::Identifier(value.as_str())),
+            _ => Err(Error::ArgTypeError(value.into(), value.as_str())),
         }
     }
 }
@@ -512,27 +511,56 @@ impl<'a> ir::Program<'a> {
                         Rule::command_if_then => {
                             let mut kwords = command_part.into_inner();
                             if_indices.push(prog.commands.len());
+                            let v1 = kwords.next().unwrap();
+                            let condition = match v1.as_rule() {
+                                Rule::integer | Rule::identifier => {
+                                    ir::LogicalExpression::Integer {
+                                        i1: (&v1).try_into()?,
+                                        op: next_pair_unchecked!(kwords).try_into()?,
+                                        i2: next_pair_unchecked!(kwords).try_into()?,
+                                    }
+                                }
+                                Rule::string | Rule::identifier_str => ir::LogicalExpression::Str {
+                                    s1: (&v1).try_into()?,
+                                    op: next_pair_unchecked!(kwords).try_into()?,
+                                    s2: next_pair_unchecked!(kwords).try_into()?,
+                                },
+                                _ => unreachable!(),
+                            };
                             prog.commands.push(ir::Command::If {
-                                i1: next_pair_unchecked!(kwords).try_into()?,
-                                op: next_pair_unchecked!(kwords).try_into()?,
-                                i2: next_pair_unchecked!(kwords).try_into()?,
+                                condition,
                                 goto_false: 0,
                             });
                         }
                         Rule::command_set => {
                             let mut kwords = command_part.into_inner();
                             let var = next_pair_unchecked!(kwords).try_into()?;
-                            let i1 = next_pair_unchecked!(kwords).try_into()?;
-                            let val = {
-                                if kwords.peek().is_none() {
-                                    ir::SetValue::Value(i1)
-                                } else {
-                                    ir::SetValue::Expression {
-                                        i1,
-                                        op: next_pair_unchecked!(kwords).try_into()?,
-                                        i2: next_pair_unchecked!(kwords).try_into()?,
+                            let v1 = kwords.next().unwrap();
+                            let val = match v1.as_rule() {
+                                Rule::integer | Rule::identifier => {
+                                    let i1 = (&v1).try_into()?;
+                                    if kwords.peek().is_none() {
+                                        ir::MathExpression::ValueInteger(i1)
+                                    } else {
+                                        ir::MathExpression::ExpressionInteger {
+                                            i1,
+                                            op: next_pair_unchecked!(kwords).try_into()?,
+                                            i2: next_pair_unchecked!(kwords).try_into()?,
+                                        }
                                     }
                                 }
+                                Rule::string | Rule::identifier_str => {
+                                    let s1 = (&v1).try_into()?;
+                                    if kwords.peek().is_none() {
+                                        ir::MathExpression::ValueStr(s1)
+                                    } else {
+                                        ir::MathExpression::ExpressionStr {
+                                            s1,
+                                            s2: next_pair_unchecked!(kwords).try_into()?,
+                                        }
+                                    }
+                                }
+                                _ => unreachable!(),
                             };
                             prog.commands.push(ir::Command::Set { var, val });
                         }
@@ -559,9 +587,7 @@ impl<'a> ir::Program<'a> {
             for idx in if_indices {
                 let goto_false_tgt = prog.commands.len();
                 if let ir::Command::If {
-                    i1: _,
-                    op: _,
-                    i2: _,
+                    condition: _,
                     goto_false: goto_false_idx,
                 } = &mut prog.commands[idx]
                 {

@@ -352,12 +352,31 @@ pub enum Str<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum SetValue<'a> {
-    Value(Integer<'a>),
-    Expression {
+pub enum MathExpression<'a> {
+    ValueInteger(Integer<'a>),
+    ValueStr(Str<'a>),
+    ExpressionInteger {
         i1: Integer<'a>,
         op: MathOperator,
         i2: Integer<'a>,
+    },
+    ExpressionStr {
+        s1: Str<'a>,
+        s2: Str<'a>,
+    },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum LogicalExpression<'a> {
+    Integer {
+        i1: Integer<'a>,
+        op: LogicalOperator,
+        i2: Integer<'a>,
+    },
+    Str {
+        s1: Str<'a>,
+        op: LogicalOperator,
+        s2: Str<'a>,
     },
 }
 
@@ -455,9 +474,7 @@ pub enum Command<'a> {
     Return,
     Goto(Identifier<'a>),
     If {
-        i1: Integer<'a>,
-        op: LogicalOperator,
-        i2: Integer<'a>,
+        condition: LogicalExpression<'a>,
         goto_false: usize,
     },
     MessageBox {
@@ -471,7 +488,7 @@ pub enum Command<'a> {
     Run(Str<'a>),
     Set {
         var: Identifier<'a>,
-        val: SetValue<'a>,
+        val: MathExpression<'a>,
     },
     SetKeyboard(HashMap<Key<'a>, Identifier<'a>>),
     SetMenu(Vec<MenuCategory<'a>>),
