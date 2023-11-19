@@ -14,11 +14,11 @@ command = ${
 
 command_func    = ${
     kword_command_func ~ whitespace_or_comment* ~ "(" ~ whitespace_or_comment* ~ ")"
-  | kword_command_func ~ whitespace_or_comment* ~ "(" ~ whitespace_or_comment_or_lf* ~ ((integer | string | identifier | token) ~ whitespace_or_comment_or_lf* ~ "," ~ whitespace_or_comment_or_lf*)* ~ (integer | string | identifier | token) ~ whitespace_or_comment_or_lf* ~ ")"}
+  | kword_command_func ~ whitespace_or_comment* ~ "(" ~ whitespace_or_comment_or_lf* ~ ((integer | string | identifier_str | identifier | token) ~ whitespace_or_comment_or_lf* ~ "," ~ whitespace_or_comment_or_lf*)* ~ (integer | string | identifier_str | identifier | token) ~ whitespace_or_comment_or_lf* ~ ")"}
 command_goto    = ${ ^"Goto" ~ whitespace_or_comment* ~ identifier ~ ":"? }
 command_gosub   = ${ ^"Gosub" ~ whitespace_or_comment* ~ identifier }
-command_if_then = ${ ^"If" ~ whitespace_gz ~ (integer | identifier | string) ~ whitespace_or_comment* ~ logical_operator ~ whitespace_or_comment* ~ (integer | identifier | string) ~ whitespace_gz ~ ^"Then" }
-command_set     = ${ ^"Set" ~ whitespace_gz ~ identifier ~ whitespace_or_comment* ~ "=" ~ whitespace_or_comment* ~ (integer | identifier | string) ~ (whitespace_or_comment* ~ math_operator ~ whitespace_or_comment* ~ (integer | identifier | string))? }
+command_if_then = ${ ^"If" ~ whitespace_gz ~ (integer | identifier_str | identifier | string) ~ whitespace_or_comment* ~ logical_operator ~ whitespace_or_comment* ~ (integer | identifier_str | identifier | string) ~ whitespace_gz ~ ^"Then" }
+command_set     = ${ ^"Set" ~ whitespace_gz ~ (identifier_str | identifier) ~ whitespace_or_comment* ~ "=" ~ whitespace_or_comment* ~ (integer | identifier_str | identifier | string) ~ (whitespace_or_comment* ~ math_operator ~ whitespace_or_comment* ~ (integer | identifier_str | identifier | string))? }
 label           = ${ identifier ~ ":" }
 
 logical_operator = { "=" | "<=" | "<>" | "<" | ">=" | ">" }
@@ -231,7 +231,8 @@ kword_reserved = {
 
 integer    = @{ ASCII_DIGIT+ }
 string     = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-identifier = @{ !(kword_reserved ~ !(ASCII_ALPHA | ASCII_DIGIT | "_")) ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* ~ "$"?}
+identifier_str = @{identifier ~ "$"}
+identifier = @{ !(kword_reserved ~ !(ASCII_ALPHA | ASCII_DIGIT | "_")) ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | ASCII_DIGIT | "_")*}
 
 newline               = _{ NEWLINE }
 whitespace            = _{ " " | "\t" | "\r" | "|" }

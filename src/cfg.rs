@@ -10,10 +10,13 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
+use std::fmt;
+
 #[derive(Debug, Default)]
 pub enum Standard {
     #[default]
-    WIN3,
+    WIN3_0,
+    WIN3_1,
 }
 
 impl TryFrom<&str> for Standard {
@@ -21,9 +24,23 @@ impl TryFrom<&str> for Standard {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "win3" => Ok(Self::WIN3),
+            "win3.0" => Ok(Self::WIN3_0),
+            "win3.1" => Ok(Self::WIN3_1),
             _ => Err(()),
         }
+    }
+}
+
+impl fmt::Display for Standard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Standard::WIN3_0 => "3.0",
+                Standard::WIN3_1 => "3.1",
+            }
+        )
     }
 }
 

@@ -69,16 +69,6 @@ fn str_lit_parse(s: &str) -> Option<&str> {
     }
 }
 
-fn next_pair_str_lit<'a>(pairs: &mut Pairs<'a, Rule>) -> Result<&'a str, Error<'a>> {
-    let pair = &(pairs.next().ok_or_else(|| Error::MissingArgError)?);
-    if let Rule::string = pair.as_rule() {
-        Ok(str_lit_parse(pair.as_str())
-            .ok_or_else(|| Error::ArgTypeError(pair.into(), pair.as_str()))?)
-    } else {
-        Err(Error::ArgTypeError(pair.into(), pair.as_str()))
-    }
-}
-
 fn next_pair_set_menu_label<'a>(
     pairs: &mut Pairs<'a, Rule>,
 ) -> Result<Option<ir::Identifier<'a>>, Error<'a>> {
@@ -173,31 +163,6 @@ enum_impl_from_str!(
     (NoUnderline, "NOUNDERLINE")
 );
 
-impl<'a> TryFrom<&Pair<'a, Rule>> for ir::PhysicalKey {
-    type Error = Error<'a>;
-
-    fn try_from(value: &Pair<'a, Rule>) -> Result<Self, Self::Error> {
-        let s = value.as_str();
-        match s.len() {
-            len @ (3 | 4) => {
-                let c = s.chars().nth(len - 2).unwrap();
-                if (len == 4 && s.chars().nth(1).unwrap() != '^')
-                    || !c.is_ascii_graphic()
-                    || (c != ' ' && c.is_ascii_whitespace())
-                {
-                    Err(Error::InvalidPhysicalKeyError(s))
-                } else {
-                    Ok(ir::PhysicalKey {
-                        chr: c,
-                        ctrl: len == 4,
-                    })
-                }
-            }
-            _ => Err(Error::InvalidPhysicalKeyError(s)),
-        }
-    }
-}
-
 impl<'a> TryFrom<&Pair<'a, Rule>> for ir::Key<'a> {
     type Error = Error<'a>;
 
@@ -233,6 +198,21 @@ impl<'a> TryFrom<&Pair<'a, Rule>> for ir::Integer<'a> {
                 )?))
             }
             Rule::identifier => Ok(ir::Integer::Variable(ir::Identifier(pair.as_str()))),
+            _ => Err(Error::ArgTypeError(pair.into(), pair.as_str())),
+        }
+    }
+}
+
+impl<'a> TryFrom<&Pair<'a, Rule>> for ir::Str<'a> {
+    type Error = Error<'a>;
+
+    fn try_from(pair: &Pair<'a, Rule>) -> Result<ir::Str<'a>, Self::Error> {
+        match pair.as_rule() {
+            Rule::string => Ok(ir::Str::Literal(
+                str_lit_parse(pair.as_str())
+                    .ok_or_else(|| Error::ArgTypeError(pair.into(), pair.as_str()))?,
+            )),
+            Rule::identifier_str => Ok(ir::Str::Variable(ir::Identifier(pair.as_str()))),
             _ => Err(Error::ArgTypeError(pair.into(), pair.as_str())),
         }
     }
@@ -276,8 +256,8 @@ pub enum Error<'a> {
     ArgTypeError(ErrorLoc, &'a str),
     #[error("Number of labels exceeds 500")]
     ExcessLabelsError,
-    #[error("Physical key '{}' is invalid", .0)]
-    InvalidPhysicalKeyError(&'a str),
+    #[error("{} '{}' is unsupported by Oriel {}", .0, .1, .2)]
+    StandardUnsupportedError(ErrorLoc, &'a str, cfg::Standard),
 }
 
 impl From<pest::error::Error<Rule>> for Error<'_> {
@@ -287,12 +267,12 @@ impl From<pest::error::Error<Rule>> for Error<'_> {
 }
 
 impl<'a> ir::Command<'a> {
-    fn from_keyword(command: &Pair<'a, Rule>) -> ir::Command<'a> {
+    fn try_from_keyword(command: &Pair<'a, Rule>) -> Result<ir::Command<'a>, Error<'a>> {
         match command.as_str().to_lowercase().as_str() {
-            "beep" => ir::Command::Beep,
-            "drawbackground" => ir::Command::DrawBackground,
-            "end" => ir::Command::End,
-            "return" => ir::Command::Return,
+            "beep" => Ok(ir::Command::Beep),
+            "drawbackground" => Ok(ir::Command::DrawBackground),
+            "end" => Ok(ir::Command::End),
+            "return" => Ok(ir::Command::Return),
             _ => unreachable!(),
         }
     }
@@ -313,7 +293,7 @@ impl<'a> ir::Command<'a> {
             "drawbitmap" => ir::Command::DrawBitmap {
                 x: next_pair!(kwords)?.try_into()?,
                 y: next_pair!(kwords)?.try_into()?,
-                filename: next_pair_str_lit(kwords)?,
+                filename: next_pair!(kwords)?.try_into()?,
             },
             "drawchord" => ir::Command::DrawChord {
                 x1: next_pair!(kwords)?.try_into()?,
@@ -378,22 +358,22 @@ impl<'a> ir::Command<'a> {
                 y1: next_pair!(kwords)?.try_into()?,
                 x2: next_pair!(kwords)?.try_into()?,
                 y2: next_pair!(kwords)?.try_into()?,
-                filename: next_pair_str_lit(kwords)?,
+                filename: next_pair!(kwords)?.try_into()?,
             },
             "drawtext" => ir::Command::DrawText {
                 x: next_pair!(kwords)?.try_into()?,
                 y: next_pair!(kwords)?.try_into()?,
-                text: next_pair_str_lit(kwords)?,
+                text: next_pair!(kwords)?.try_into()?,
             },
             "messagebox" => ir::Command::MessageBox {
                 typ: next_pair!(kwords)?.try_into()?,
                 default_button: next_pair!(kwords)?.try_into()?,
                 icon: next_pair!(kwords)?.try_into()?,
-                text: next_pair_str_lit(kwords)?,
-                caption: next_pair_str_lit(kwords)?,
+                text: next_pair!(kwords)?.try_into()?,
+                caption: next_pair!(kwords)?.try_into()?,
                 button_pushed: next_pair!(kwords)?.try_into()?,
             },
-            "run" => ir::Command::Run(next_pair_str_lit(kwords)?),
+            "run" => ir::Command::Run(next_pair!(kwords)?.try_into()?),
             "setkeyboard" => ir::Command::SetKeyboard({
                 let mut params: HashMap<ir::Key, ir::Identifier> = HashMap::new();
                 while kwords.peek().is_some() {
@@ -409,7 +389,7 @@ impl<'a> ir::Command<'a> {
                 while kwords.peek().is_some() {
                     items.push(ir::MenuCategory {
                         item: ir::MenuItem {
-                            name: next_pair_str_lit(kwords)?,
+                            name: next_pair!(kwords)?.try_into()?,
                             label: next_pair_set_menu_label(kwords)?,
                         },
                         members: {
@@ -419,10 +399,8 @@ impl<'a> ir::Command<'a> {
                                 members.push(match pair.as_str() {
                                     "ENDPOPUP" => break,
                                     "SEPARATOR" => ir::MenuMember::Separator,
-                                    s => ir::MenuMember::Item(ir::MenuItem {
-                                        name: str_lit_parse(s).ok_or_else(|| {
-                                            Error::ArgTypeError((&pair).into(), pair.as_str())
-                                        })?,
+                                    _ => ir::MenuMember::Item(ir::MenuItem {
+                                        name: (&pair).try_into()?,
                                         label: next_pair_set_menu_label(kwords)?,
                                     }),
                                 });
@@ -464,10 +442,10 @@ impl<'a> ir::Command<'a> {
                 g: next_pair!(kwords)?.try_into()?,
                 b: next_pair!(kwords)?.try_into()?,
             },
-            "usecaption" => ir::Command::UseCaption(next_pair_str_lit(kwords)?),
+            "usecaption" => ir::Command::UseCaption(next_pair!(kwords)?.try_into()?),
             "usecoordinates" => ir::Command::UseCoordinates(next_pair!(kwords)?.try_into()?),
             "usefont" => ir::Command::UseFont {
-                name: next_pair_str_lit(kwords)?,
+                name: next_pair!(kwords)?.try_into()?,
                 width: next_pair!(kwords)?.try_into()?,
                 height: next_pair!(kwords)?.try_into()?,
                 bold: next_pair!(kwords)?.try_into()?,
@@ -515,7 +493,8 @@ impl<'a> ir::Program<'a> {
                 for command_part in command.into_inner() {
                     match command_part.as_rule() {
                         Rule::kword_command_nfunc => {
-                            prog.commands.push(ir::Command::from_keyword(&command_part));
+                            prog.commands
+                                .push(ir::Command::try_from_keyword(&command_part)?);
                         }
                         Rule::command_func => prog
                             .commands

@@ -615,7 +615,7 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
 
     fn set_menu(
         &mut self,
-        menu: &[ir::MenuCategory<'a>],
+        menu: &[vm::MenuCategory<'a>],
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.menu_bar
             .children()
@@ -630,10 +630,10 @@ impl<'a> vm::VMSys<'a> for VMSysGtk<'a> {
                         let submenu = gtk::Menu::new();
                         category.members.iter().for_each(|member| {
                             match member {
-                                ir::MenuMember::Item(subitem) => {
+                                vm::MenuMember::Item(subitem) => {
                                     submenu.append(&menu_item_conv(subitem, &mut self.input_ctx));
                                 }
-                                ir::MenuMember::Separator => {
+                                vm::MenuMember::Separator => {
                                     submenu.append(&gtk::SeparatorMenuItem::new());
                                 }
                             };
@@ -1078,7 +1078,7 @@ fn eventkey_conv(event: &gdk::EventKey) -> Vec<vm::Key> {
 }
 
 fn menu_item_conv<'a>(
-    item: &ir::MenuItem<'a>,
+    item: &vm::MenuItem<'a>,
     input_ctx: &mut input::InputCtx<'a>,
 ) -> gtk::MenuItem {
     let menu_item = if item.name.contains('&') {

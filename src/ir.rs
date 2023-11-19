@@ -154,6 +154,30 @@ pub enum VirtualKey {
     DoubleQuoteOrSingleQuote,
 }
 
+impl TryFrom<&str> for PhysicalKey {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value.len() {
+            len @ (3 | 4) => {
+                let c = value.chars().nth(len - 2).unwrap();
+                if (len == 4 && value.chars().nth(1).unwrap() != '^')
+                    || !c.is_ascii_graphic()
+                    || (c != ' ' && c.is_ascii_whitespace())
+                {
+                    Err(())
+                } else {
+                    Ok(PhysicalKey {
+                        chr: c,
+                        ctrl: len == 4,
+                    })
+                }
+            }
+            _ => Err(()),
+        }
+    }
+}
+
 impl TryFrom<u16> for VirtualKey {
     type Error = ();
 
@@ -275,7 +299,7 @@ pub struct PhysicalKey {
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Key<'a> {
     Virtual(Integer<'a>),
-    Physical(PhysicalKey),
+    Physical(Str<'a>),
 }
 
 #[derive(Debug, Clone)]
@@ -286,7 +310,7 @@ pub struct MenuCategory<'a> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct MenuItem<'a> {
-    pub name: &'a str,
+    pub name: Str<'a>,
     pub label: Option<Identifier<'a>>,
 }
 
@@ -321,6 +345,12 @@ pub enum Integer<'a> {
     Variable(Identifier<'a>),
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub enum Str<'a> {
+    Literal(&'a str),
+    Variable(Identifier<'a>),
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum SetValue<'a> {
     Value(Integer<'a>),
@@ -348,7 +378,7 @@ pub enum Command<'a> {
     DrawBitmap {
         x: Integer<'a>,
         y: Integer<'a>,
-        filename: &'a str,
+        filename: Str<'a>,
     },
     DrawChord {
         x1: Integer<'a>,
@@ -413,12 +443,12 @@ pub enum Command<'a> {
         y1: Integer<'a>,
         x2: Integer<'a>,
         y2: Integer<'a>,
-        filename: &'a str,
+        filename: Str<'a>,
     },
     DrawText {
         x: Integer<'a>,
         y: Integer<'a>,
-        text: &'a str,
+        text: Str<'a>,
     },
     End,
     Gosub(Identifier<'a>),
@@ -434,11 +464,11 @@ pub enum Command<'a> {
         typ: MessageBoxType,
         default_button: Integer<'a>,
         icon: MessageBoxIcon,
-        text: &'a str,
-        caption: &'a str,
+        text: Str<'a>,
+        caption: Str<'a>,
         button_pushed: Identifier<'a>,
     },
-    Run(&'a str),
+    Run(Str<'a>),
     Set {
         var: Identifier<'a>,
         val: SetValue<'a>,
@@ -460,10 +490,10 @@ pub enum Command<'a> {
         g: Integer<'a>,
         b: Integer<'a>,
     },
-    UseCaption(&'a str),
+    UseCaption(Str<'a>),
     UseCoordinates(Coordinates),
     UseFont {
-        name: &'a str,
+        name: Str<'a>,
         width: Integer<'a>,
         height: Integer<'a>,
         bold: FontWeight,

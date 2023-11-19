@@ -55,6 +55,24 @@ pub struct MouseRegion<'a> {
     pub callbacks: &'a ir::MouseCallbacks<'a>,
 }
 
+#[derive(Debug, Clone)]
+pub struct MenuCategory<'a> {
+    pub item: MenuItem<'a>,
+    pub members: Vec<MenuMember<'a>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct MenuItem<'a> {
+    pub name: &'a str,
+    pub label: Option<ir::Identifier<'a>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum MenuMember<'a> {
+    Item(MenuItem<'a>),
+    Separator,
+}
+
 pub enum Input<'a> {
     End,
     Goto(ir::Identifier<'a>),
@@ -168,8 +186,7 @@ pub trait VMSys<'a> {
         &mut self,
         params: HashMap<Key, ir::Identifier<'a>>,
     ) -> Result<(), Box<dyn std::error::Error>>;
-    fn set_menu(&mut self, menu: &[ir::MenuCategory<'a>])
-        -> Result<(), Box<dyn std::error::Error>>;
+    fn set_menu(&mut self, menu: &[MenuCategory<'a>]) -> Result<(), Box<dyn std::error::Error>>;
     fn set_mouse(&mut self, regions: &[MouseRegion<'a>]) -> Result<(), Box<dyn std::error::Error>>;
     fn set_wait_mode(&mut self, mode: ir::WaitMode) -> Result<(), Box<dyn std::error::Error>>;
     fn set_window(&mut self, option: ir::SetWindowOption)
@@ -228,10 +245,14 @@ pub enum Error {
     MathOperationError,
     #[error("Invalid Virtual Key")]
     InvalidVirtualKeyError,
+    #[error("Invalid Physical Key")]
+    InvalidPhysicalKeyError,
     #[error("Nonexistent Label")]
     NonexistentLabelError,
     #[error("Number of integer variables exceeds 500")]
     ExcessVariablesError,
+    #[error("Number of string variables exceeds 200")]
+    ExcessVariablesStrError,
     #[error("System Error: {}", .0)]
     SystemError(#[from] Box<dyn std::error::Error>),
 }
@@ -249,11 +270,18 @@ macro_rules! get_integers {
     };
 }
 
+macro_rules! get_strings {
+    ($self:ident, $( $name:ident ),*) => {
+        $(let $name = $self.get_str($name)?;)*
+    };
+}
+
 pub struct VM<'a> {
     program: &'a ir::Program<'a>,
     config: &'a cfg::Config,
     ip: usize,
     vars: HashMap<ir::Identifier<'a>, u16>,
+    vars_str: HashMap<ir::Identifier<'a>, &'a str>,
     call_stack: Vec<usize>,
     ctx: &'a mut dyn VMSys<'a>,
 }
@@ -269,6 +297,7 @@ impl<'a> VM<'a> {
             config,
             ip: 0,
             vars: HashMap::new(),
+            vars_str: HashMap::new(),
             call_stack: Vec::new(),
             ctx,
         }
@@ -288,11 +317,34 @@ impl<'a> VM<'a> {
         })
     }
 
+    fn get_str(&mut self, s: ir::Str<'a>) -> Result<&'a str, Error> {
+        Ok(match s {
+            ir::Str::Literal(val) => val,
+            ir::Str::Variable(ident) => {
+                if let Some(&val) = self.vars_str.get(&ident) {
+                    val
+                } else {
+                    self.set_variable_str(ident, "")?;
+                    ""
+                }
+            }
+        })
+    }
+
     fn set_variable(&mut self, ident: ir::Identifier<'a>, val: u16) -> Result<(), Error> {
         if self.config.pedantic && self.vars.len() >= 500 {
             Err(Error::ExcessVariablesError)
         } else {
             self.vars.insert(ident, val);
+            Ok(())
+        }
+    }
+
+    fn set_variable_str(&mut self, ident: ir::Identifier<'a>, val: &'a str) -> Result<(), Error> {
+        if self.config.pedantic && self.vars_str.len() >= 200 {
+            Err(Error::ExcessVariablesStrError)
+        } else {
+            self.vars_str.insert(ident, val);
             Ok(())
         }
     }
@@ -325,8 +377,8 @@ impl<'a> VM<'a> {
             }),
             ir::Command::DrawBackground => incr_ip!(self, self.ctx.draw_background()?),
             ir::Command::DrawBitmap { x, y, filename } => incr_ip!(self, {
-                let x = self.get_integer(x)?;
-                let y = self.get_integer(y)?;
+                get_integers!(self, x, y);
+                get_strings!(self, filename);
                 self.ctx.draw_bitmap(x, y, filename)?
             }),
             ir::Command::DrawChord {
@@ -394,10 +446,12 @@ impl<'a> VM<'a> {
                 filename,
             } => incr_ip!(self, {
                 get_integers!(self, x1, y1, x2, y2);
+                get_strings!(self, filename);
                 self.ctx.draw_sized_bitmap(x1, y1, x2, y2, filename)?
             }),
             ir::Command::DrawText { x, y, text } => incr_ip!(self, {
                 get_integers!(self, x, y);
+                get_strings!(self, text);
                 self.ctx.draw_text(x, y, text)?
             }),
             ir::Command::End => return Ok(false),
@@ -433,12 +487,16 @@ impl<'a> VM<'a> {
                 button_pushed,
             } => {
                 get_integers!(self, default_button);
+                get_strings!(self, text, caption);
                 let button_pushed_val =
                     self.ctx
                         .message_box(typ, default_button, icon, text, caption)?;
                 incr_ip!(self, self.set_variable(button_pushed, button_pushed_val)?);
             }
-            ir::Command::Run(command) => incr_ip!(self, self.ctx.run(command)?),
+            ir::Command::Run(command) => incr_ip!(self, {
+                get_strings!(self, command);
+                self.ctx.run(command)?
+            }),
             ir::Command::Set { var, val } => incr_ip!(self, {
                 let ident = match val {
                     ir::SetValue::Value(i) => self.get_integer(i)?,
@@ -455,12 +513,15 @@ impl<'a> VM<'a> {
                         Ok((
                             match key {
                                 ir::Key::Virtual(integer) => Key::Virtual(
-                                    (self
-                                        .get_integer(integer)?
+                                    self.get_integer(integer)?
                                         .try_into()
-                                        .map_err(|_| Error::InvalidVirtualKeyError))?,
+                                        .map_err(|_| Error::InvalidVirtualKeyError)?,
                                 ),
-                                ir::Key::Physical(physical) => Key::Physical(physical),
+                                ir::Key::Physical(physical) => Key::Physical({
+                                    self.get_str(physical)?
+                                        .try_into()
+                                        .map_err(|_| Error::InvalidPhysicalKeyError)?
+                                }),
                             },
                             label,
                         ))
@@ -468,7 +529,33 @@ impl<'a> VM<'a> {
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 self.ctx.set_keyboard(params)?
             }),
-            ir::Command::SetMenu(ref menu) => incr_ip!(self, self.ctx.set_menu(menu)?),
+            ir::Command::SetMenu(ref menu) => incr_ip!(self, {
+                let menu = menu
+                    .iter()
+                    .map(|category| {
+                        Ok(MenuCategory {
+                            item: MenuItem {
+                                name: self.get_str(category.item.name)?,
+                                label: category.item.label,
+                            },
+                            members: category
+                                .members
+                                .iter()
+                                .map(|member| {
+                                    Ok(match member {
+                                        ir::MenuMember::Item(item) => MenuMember::Item(MenuItem {
+                                            name: self.get_str(item.name)?,
+                                            label: item.label,
+                                        }),
+                                        ir::MenuMember::Separator => MenuMember::Separator,
+                                    })
+                                })
+                                .collect::<Result<_, Error>>()?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+                self.ctx.set_menu(&menu)?
+            }),
             ir::Command::SetMouse(ref params) => incr_ip!(self, {
                 let params = &params
                     .iter()
@@ -494,7 +581,10 @@ impl<'a> VM<'a> {
                 get_integers!(self, r, g, b);
                 self.ctx.use_brush(option, r, g, b)?
             }),
-            ir::Command::UseCaption(text) => incr_ip!(self, self.ctx.use_caption(text)?),
+            ir::Command::UseCaption(text) => incr_ip!(self, {
+                get_strings!(self, text);
+                self.ctx.use_caption(text)?
+            }),
             ir::Command::UseCoordinates(coordinates) => {
                 incr_ip!(self, self.ctx.use_coordinates(coordinates)?);
             }
@@ -510,6 +600,7 @@ impl<'a> VM<'a> {
                 b,
             } => incr_ip!(self, {
                 get_integers!(self, width, height, r, g, b);
+                get_strings!(self, name);
                 self.ctx
                     .use_font(name, width, height, bold, italic, underline, r, g, b)?
             }),
