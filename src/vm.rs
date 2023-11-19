@@ -17,7 +17,7 @@ use thiserror::Error;
 use crate::{cfg, ir};
 
 impl ir::LogicalOperator {
-    fn cmp_integer(&self, i1: u16, i2: u16) -> bool {
+    fn cmp<T: PartialOrd>(&self, i1: T, i2: T) -> bool {
         match self {
             ir::LogicalOperator::Equal => i1 == i2,
             ir::LogicalOperator::Less => i1 < i2,
@@ -25,17 +25,6 @@ impl ir::LogicalOperator {
             ir::LogicalOperator::LEqual => i1 <= i2,
             ir::LogicalOperator::GEqual => i1 >= i2,
             ir::LogicalOperator::NEqual => i1 != i2,
-        }
-    }
-
-    fn cmp_str(&self, s1: &str, s2: &str) -> bool {
-        match self {
-            ir::LogicalOperator::Equal => s1 == s2,
-            ir::LogicalOperator::Less => s1 < s2,
-            ir::LogicalOperator::Greater => s1 > s2,
-            ir::LogicalOperator::LEqual => s1 <= s2,
-            ir::LogicalOperator::GEqual => s1 >= s2,
-            ir::LogicalOperator::NEqual => s1 != s2,
         }
     }
 }
@@ -488,10 +477,10 @@ impl<'a> VM<'a> {
             } => {
                 self.ip = if match condition {
                     ir::LogicalExpression::Integer { i1, op, i2 } => {
-                        op.cmp_integer(self.get_integer(i1)?, self.get_integer(i2)?)
+                        op.cmp(self.get_integer(i1)?, self.get_integer(i2)?)
                     }
                     ir::LogicalExpression::Str { s1, op, s2 } => {
-                        op.cmp_str(self.get_str(s1)?.as_str(), self.get_str(s2)?.as_str())
+                        op.cmp(self.get_str(s1)?.as_str(), self.get_str(s2)?.as_str())
                     }
                 } {
                     self.ip + 1
